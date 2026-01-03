@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -51,6 +51,64 @@ export default function HomeScreen() {
     };
   });
 
+  // Metadata fetching function - memoized with useCallback
+  const fetchMetadata = useCallback(async () => {
+    try {
+      console.log('[Home] ----------------------------------------');
+      console.log('[Home] Fetching metadata at:', new Date().toISOString());
+      
+      const metadata: ZenoMetadata = await getZenoMetadata();
+      
+      console.log('[Home] Metadata received:', {
+        title: metadata.title,
+        artist: metadata.artist,
+        hasArtwork: !!metadata.artworkUrl,
+      });
+
+      // Update UI state
+      setTrackTitle(metadata.title);
+      setArtistName(metadata.artist);
+      setArtworkUrl(metadata.artworkUrl);
+      
+      console.log('[Home] UI updated with new metadata');
+      console.log('[Home] ----------------------------------------');
+    } catch (error) {
+      console.error('[Home] ❌ Metadata fetch error:', error);
+      console.log('[Home] Keeping existing values');
+      console.log('[Home] ----------------------------------------');
+    }
+  }, []);
+
+  // Start metadata polling - memoized with useCallback
+  const startMetadataPolling = useCallback(() => {
+    console.log('[Home] Starting metadata polling');
+    console.log('[Home] Poll interval:', METADATA_POLL_INTERVAL / 1000, 'seconds');
+    
+    // Clear any existing interval
+    if (metadataIntervalRef.current) {
+      console.log('[Home] Clearing existing polling interval');
+      clearInterval(metadataIntervalRef.current);
+    }
+
+    // Poll metadata at regular intervals
+    metadataIntervalRef.current = setInterval(() => {
+      console.log('[Home] 🔄 Polling metadata (interval tick)');
+      fetchMetadata();
+    }, METADATA_POLL_INTERVAL);
+    
+    console.log('[Home] Metadata polling started successfully');
+  }, [fetchMetadata]);
+
+  // Stop metadata polling - memoized with useCallback
+  const stopMetadataPolling = useCallback(() => {
+    console.log('[Home] Stopping metadata polling');
+    if (metadataIntervalRef.current) {
+      clearInterval(metadataIntervalRef.current);
+      metadataIntervalRef.current = null;
+      console.log('[Home] Metadata polling stopped');
+    }
+  }, []);
+
   // Configure audio on mount
   useEffect(() => {
     console.log('[Home] ========================================');
@@ -85,7 +143,7 @@ export default function HomeScreen() {
       stopMetadataPolling();
       console.log('[Home] ========================================');
     };
-  }, []);
+  }, [fetchMetadata, sound, startMetadataPolling, stopMetadataPolling]);
 
   // Handle play button animation
   useEffect(() => {
@@ -98,68 +156,7 @@ export default function HomeScreen() {
     } else {
       rotation.value = withTiming(0, { duration: 300 });
     }
-  }, [isPlaying]);
-
-  // Metadata fetching function
-  const fetchMetadata = async () => {
-    try {
-      console.log('[Home] ----------------------------------------');
-      console.log('[Home] Fetching metadata at:', new Date().toISOString());
-      
-      const metadata: ZenoMetadata = await getZenoMetadata();
-      
-      console.log('[Home] Metadata received:', {
-        title: metadata.title,
-        artist: metadata.artist,
-        hasArtwork: !!metadata.artworkUrl,
-      });
-
-      // Update UI state
-      setTrackTitle(metadata.title);
-      setArtistName(metadata.artist);
-      setArtworkUrl(metadata.artworkUrl);
-      
-      console.log('[Home] UI updated with new metadata');
-      console.log('[Home] ----------------------------------------');
-    } catch (error) {
-      console.error('[Home] ❌ Metadata fetch error:', error);
-      console.log('[Home] Keeping existing values:', {
-        title: trackTitle,
-        artist: artistName,
-      });
-      console.log('[Home] ----------------------------------------');
-    }
-  };
-
-  // Start metadata polling
-  const startMetadataPolling = () => {
-    console.log('[Home] Starting metadata polling');
-    console.log('[Home] Poll interval:', METADATA_POLL_INTERVAL / 1000, 'seconds');
-    
-    // Clear any existing interval
-    if (metadataIntervalRef.current) {
-      console.log('[Home] Clearing existing polling interval');
-      clearInterval(metadataIntervalRef.current);
-    }
-
-    // Poll metadata at regular intervals
-    metadataIntervalRef.current = setInterval(() => {
-      console.log('[Home] 🔄 Polling metadata (interval tick)');
-      fetchMetadata();
-    }, METADATA_POLL_INTERVAL);
-    
-    console.log('[Home] Metadata polling started successfully');
-  };
-
-  // Stop metadata polling
-  const stopMetadataPolling = () => {
-    console.log('[Home] Stopping metadata polling');
-    if (metadataIntervalRef.current) {
-      clearInterval(metadataIntervalRef.current);
-      metadataIntervalRef.current = null;
-      console.log('[Home] Metadata polling stopped');
-    }
-  };
+  }, [isPlaying, rotation]);
 
   const togglePlayback = async () => {
     try {

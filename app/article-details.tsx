@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -26,9 +26,9 @@ interface WordPressPost {
   date: string;
   link: string;
   _embedded?: {
-    'wp:featuredmedia'?: Array<{
+    'wp:featuredmedia'?: {
       source_url?: string;
-    }>;
+    }[];
   };
 }
 
@@ -57,13 +57,7 @@ export default function ArticleDetailsScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (id) {
-      fetchArticle();
-    }
-  }, [id]);
-
-  const fetchArticle = async () => {
+  const fetchArticle = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -102,7 +96,13 @@ export default function ArticleDetailsScreen() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [id]);
+
+  useEffect(() => {
+    if (id) {
+      fetchArticle();
+    }
+  }, [id, fetchArticle]);
 
   const formatDate = (dateString: string): string => {
     if (!dateString) return '';
