@@ -136,14 +136,20 @@ export default function HomeScreen() {
 
     return () => {
       console.log('[Home] Component unmounting - cleaning up');
-      if (sound) {
-        console.log('[Home] Unloading audio...');
-        sound.unloadAsync();
-      }
       stopMetadataPolling();
       console.log('[Home] ========================================');
     };
-  }, [fetchMetadata, sound, startMetadataPolling, stopMetadataPolling]);
+  }, [fetchMetadata, startMetadataPolling, stopMetadataPolling]);
+
+  // Cleanup sound on unmount
+  useEffect(() => {
+    return () => {
+      if (sound) {
+        console.log('[Home] Unloading audio on unmount...');
+        sound.unloadAsync();
+      }
+    };
+  }, [sound]);
 
   // Handle play button animation
   useEffect(() => {
