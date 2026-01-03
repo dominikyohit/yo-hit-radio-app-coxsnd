@@ -16,6 +16,7 @@ import {
 } from "@react-navigation/native";
 import { StatusBar } from "expo-status-bar";
 import { WidgetProvider } from "@/contexts/WidgetContext";
+import { NotificationService } from "@/utils/notifications";
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
@@ -36,6 +37,23 @@ export default function RootLayout() {
       SplashScreen.hideAsync();
     }
   }, [loaded]);
+
+  // Initialize push notifications
+  useEffect(() => {
+    console.log('Initializing push notifications...');
+    NotificationService.initialize().then((success) => {
+      if (success) {
+        console.log('Push notifications initialized successfully');
+      } else {
+        console.log('Push notifications initialization failed or permission denied');
+      }
+    });
+
+    // Cleanup listeners on unmount
+    return () => {
+      NotificationService.cleanup();
+    };
+  }, []);
 
   useEffect(() => {
     if (
@@ -88,6 +106,42 @@ export default function RootLayout() {
             <Stack>
               {/* Main app with tabs */}
               <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+
+              {/* Article Details Screen */}
+              <Stack.Screen
+                name="article-details"
+                options={{
+                  headerShown: false,
+                }}
+              />
+
+              {/* Event Details Screen */}
+              <Stack.Screen
+                name="event-details"
+                options={{
+                  headerShown: false,
+                }}
+              />
+
+              {/* Auth Screens */}
+              <Stack.Screen
+                name="auth"
+                options={{
+                  headerShown: false,
+                }}
+              />
+              <Stack.Screen
+                name="auth-callback"
+                options={{
+                  headerShown: false,
+                }}
+              />
+              <Stack.Screen
+                name="auth-popup"
+                options={{
+                  headerShown: false,
+                }}
+              />
 
               {/* Modal Demo Screens */}
               <Stack.Screen

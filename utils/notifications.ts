@@ -1,208 +1,142 @@
 
-import { Platform } from 'react-native';
-import OneSignal from 'react-native-onesignal';
-import Constants from 'expo-constants';
+import * as Notifications from 'expo-notifications';
 import { router } from 'expo-router';
+import { Platform } from 'react-native';
+import Constants from 'expo-constants';
+
+// Configure notification behavior
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: true,
+  }),
+});
 
 export class NotificationService {
-  private static initialized = false;
+  private static notificationListener: any;
+  private static responseListener: any;
 
   /**
-   * Initialize OneSignal with app ID from environment
+   * Initialize push notifications
    */
-  static initialize() {
-    if (this.initialized) {
-      console.log('OneSignal already initialized');
-      return;
-    }
-
-    const appId = Constants.expoConfig?.extra?.oneSignalAppId || process.env.EXPO_PUBLIC_ONESIGNAL_APP_ID;
-
-    if (!appId) {
-      console.warn('⚠️ OneSignal App ID not configured. Push notifications will not work.');
-      console.warn('Please set EXPO_PUBLIC_ONESIGNAL_APP_ID in your .env file or app.json');
-      return;
-    }
-
+  static async initialize() {
     try {
-      // Initialize OneSignal
-      OneSignal.initialize(appId);
-
-      // Request permission (iOS will show prompt, Android 13+ will show prompt)
-      OneSignal.Notifications.requestPermission(true);
-
-      // Set up notification handlers
-      this.setupNotificationHandlers();
-
-      this.initialized = true;
-      console.log('✅ OneSignal initialized successfully with App ID:', appId);
-    } catch (error) {
-      console.error('❌ Failed to initialize OneSignal:', error);
-    }
-  }
-
-  /**
-   * Set up notification event handlers
-   */
-  private static setupNotificationHandlers() {
-    // Handle notification opened (user tapped notification)
-    OneSignal.Notifications.addEventListener('click', (event) => {
-      console.log('📱 Notification clicked:', event);
+      console.log('Initializing push notifications...');
       
-      try {
-        const data = event.notification.additionalData;
-        
-        // Handle navigation based on notification data
-        if (data) {
-          // If notification contains article_id, navigate to article details
-          if (data.article_id || data.articleId) {
-            const articleId = data.article_id || data.articleId;
-            console.log('Navigating to article:', articleId);
-            router.push({
-              pathname: '/article-details',
-              params: { id: articleId }
-            });
-          }
-          // If notification contains post_id (WordPress), navigate to article details
-          else if (data.post_id || data.postId) {
-            const postId = data.post_id || data.postId;
-            console.log('Navigating to WordPress post:', postId);
-            router.push({
-              pathname: '/article-details',
-              params: { id: postId }
-            });
-          }
-          // If notification contains a link, you could open it in a browser
-          else if (data.link || data.url) {
-            console.log('Notification contains link:', data.link || data.url);
-            // Optionally open in browser or navigate to news tab
-            router.push('/(tabs)/news');
-          }
-          // Default: navigate to news tab
-          else {
-            console.log('No specific navigation data, going to news tab');
-            router.push('/(tabs)/news');
-          }
-        } else {
-          // No additional data, just go to news tab
-          console.log('No notification data, going to news tab');
-          router.push('/(tabs)/news');
+      // Request permissions
+      const { status: existingStatus } = await Notifications.getPermissionsAsync();
+      let finalStatus = existingStatus;
+
+      if (existingStatus !== 'granted') {
+        const { status } = await Notifications.requestPermissionsAsync();
+        finalStatus = status;
+      }
+
+      if (finalStatus !== 'granted') {
+        console.warn('Push notification permission not granted');
+        return false;
+      }
+
+      // Get push token for Expo's push notification service
+      if (Platform.OS !== 'web') {
+        try {
+          const token = await Notifications.getExpoPushTokenAsync({
+            projectId: Constants.expoConfig?.extra?.eas?.projectId,
+          });
+          console.log('Expo Push Token:', token.data);
+        } catch (error) {
+          console.error('Error getting push token:', error);
         }
-      } catch (error) {
-        console.error('Error handling notification click:', error);
-        // Fallback to news tab
-        router.push('/(tabs)/news');
       }
-    });
 
-    // Handle notification received in foreground
-    OneSignal.Notifications.addEventListener('foregroundWillDisplay', (event) => {
-      console.log('📬 Notification received in foreground:', event);
-      // You can prevent the notification from displaying or modify it
-      // event.preventDefault(); // Prevents notification from showing
-      event.getNotification().display(); // Shows the notification
-    });
-  }
+      // Set up notification listeners
+      this.setupListeners();
 
-  /**
-   * Check if user has granted notification permission
-   */
-  static async hasPermission(): Promise<boolean> {
-    try {
-      return await OneSignal.Notifications.getPermissionAsync();
+      console.log('Push notifications initialized successfully');
+      return true;
     } catch (error) {
-      console.error('Failed to check notification permission:', error);
+      console.error('Error initializing notifications:', error);
       return false;
     }
   }
 
   /**
-   * Request notification permission
+   * Set up notification event listeners
    */
-  static async requestPermission(): Promise<boolean> {
+  private static setupListeners() {
+    // Handle notifications received while app is foregrounded
+    this.notificationListener = Notifications.addNotificationReceivedListener(notification => {
+      console.log('Notification received:', notification);
+    });
+
+    // Handle notification taps
+    this.responseListener = Notifications.addNotificationResponseReceivedListener(response => {
+      console.log('Notification tapped:', response);
+      const data = response.notification.request.content.data;
+      
+      // Navigate to article details if article_id is present
+      if (data?.article_id) {
+        console.log('Navigating to article:', data.article_id);
+        router.push(`/article-details?id=${data.article_id}`);
+      }
+    });
+  }
+
+  /**
+   * Check if notifications are enabled
+   */
+  static async areNotificationsEnabled(): Promise<boolean> {
     try {
-      return await OneSignal.Notifications.requestPermission(true);
+      const { status } = await Notifications.getPermissionsAsync();
+      return status === 'granted';
     } catch (error) {
-      console.error('Failed to request notification permission:', error);
+      console.error('Error checking notification permissions:', error);
       return false;
     }
   }
 
   /**
-   * Enable or disable push notifications
+   * Request notification permissions
    */
-  static setNotificationsEnabled(enabled: boolean) {
+  static async requestPermissions(): Promise<boolean> {
     try {
-      if (enabled) {
-        OneSignal.Notifications.requestPermission(true);
-      } else {
-        OneSignal.User.pushSubscription.optOut();
-      }
-      console.log(`Notifications ${enabled ? 'enabled' : 'disabled'}`);
+      const { status } = await Notifications.requestPermissionsAsync();
+      return status === 'granted';
     } catch (error) {
-      console.error('Failed to set notifications enabled:', error);
+      console.error('Error requesting notification permissions:', error);
+      return false;
     }
   }
 
   /**
-   * Get the OneSignal player ID (device identifier)
+   * Clean up listeners
    */
-  static async getPlayerId(): Promise<string | null> {
-    try {
-      const deviceState = await OneSignal.User.pushSubscription.getIdAsync();
-      return deviceState;
-    } catch (error) {
-      console.error('Failed to get OneSignal player ID:', error);
-      return null;
+  static cleanup() {
+    if (this.notificationListener) {
+      Notifications.removeNotificationSubscription(this.notificationListener);
+    }
+    if (this.responseListener) {
+      Notifications.removeNotificationSubscription(this.responseListener);
     }
   }
 
   /**
-   * Add tags to user for segmentation
-   * Example: NotificationService.addTags({ user_type: 'premium', interests: 'news' })
+   * Schedule a local notification (for testing)
    */
-  static addTags(tags: Record<string, string>) {
+  static async scheduleTestNotification() {
     try {
-      OneSignal.User.addTags(tags);
-      console.log('Tags added:', tags);
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: "Yo Hit Radio 📻",
+          body: 'New article published!',
+          data: { article_id: '1' },
+        },
+        trigger: { seconds: 2 },
+      });
+      console.log('Test notification scheduled');
     } catch (error) {
-      console.error('Failed to add tags:', error);
-    }
-  }
-
-  /**
-   * Remove tags from user
-   */
-  static removeTags(keys: string[]) {
-    try {
-      OneSignal.User.removeTags(keys);
-      console.log('Tags removed:', keys);
-    } catch (error) {
-      console.error('Failed to remove tags:', error);
-    }
-  }
-
-  /**
-   * Set external user ID (for linking with your backend)
-   */
-  static setExternalUserId(userId: string) {
-    try {
-      OneSignal.login(userId);
-      console.log('External user ID set:', userId);
-    } catch (error) {
-      console.error('Failed to set external user ID:', error);
-    }
-  }
-
-  /**
-   * Remove external user ID
-   */
-  static removeExternalUserId() {
-    try {
-      OneSignal.logout();
-      console.log('External user ID removed');
-    } catch (error) {
-      console.error('Failed to remove external user ID:', error);
+      console.error('Error scheduling test notification:', error);
     }
   }
 }
