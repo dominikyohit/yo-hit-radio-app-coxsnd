@@ -11,15 +11,14 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
-import { apiGet } from '@/utils/api';
 import { IconSymbol } from '@/components/IconSymbol';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useState, useEffect } from 'react';
 import { colors } from '@/styles/commonStyles';
 
-// WordPress REST API format
-interface Article {
+// WordPress REST API response format
+interface WordPressPost {
   id: number;
   title: { rendered: string };
   excerpt: { rendered: string };
@@ -33,6 +32,19 @@ interface Article {
   };
 }
 
+// Mapped Article object for UI
+interface Article {
+  id: string;
+  title: string;
+  excerpt: string;
+  content: string;
+  featured_image_url: string | null;
+  published_date: string;
+  author: string;
+  created_at: string;
+  link: string;
+}
+
 // Helper function to strip HTML tags for simple rendering
 const stripHtml = (html: string): string => {
   return html
@@ -43,6 +55,7 @@ const stripHtml = (html: string): string => {
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
     .replace(/&#039;/g, "'")
+    .replace(/&apos;/g, "'")
     .trim();
 };
 
@@ -157,11 +170,31 @@ export default function ArticleDetailsScreen() {
       setLoading(true);
       setError(null);
       
-      // Fetch article details from backend API
-      // Backend fetches from WordPress REST API and returns the data
-      const data = await apiGet<Article>(`/api/articles/${id}`);
-      console.log('Fetched article:', data);
-      setArticle(data);
+      // Fetch directly from WordPress REST API
+      const response = await fetch(`https://yohitradio.com/wp-json/wp/v2/posts/${id}?_embed`);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const wpPost: WordPressPost = await response.json();
+      console.log('Fetched WordPress post:', wpPost);
+      
+      // Map WordPress post to Article format for UI
+      const mappedArticle: Article = {
+        id: String(wpPost.id),
+        title: wpPost.title?.rendered ?? '',
+        excerpt: stripHtml(wpPost.excerpt?.rendered ?? ''),
+        content: wpPost.content?.rendered ?? '',
+        featured_image_url: wpPost._embedded?.['wp:featuredmedia']?.[0]?.source_url ?? null,
+        published_date: wpPost.date ?? '',
+        author: 'Yo Hit Radio',
+        created_at: wpPost.date ?? '',
+        link: wpPost.link ?? '',
+      };
+      
+      console.log('Mapped article:', mappedArticle);
+      setArticle(mappedArticle);
     } catch (err) {
       console.error('Error fetching article:', err);
       setError('Failed to load article. Please try again.');
@@ -171,12 +204,28 @@ export default function ArticleDetailsScreen() {
   };
 
   const formatDate = (dateString: string): string => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
+    // Handle empty or invalid dates
+    if (!dateString) {
+      return '';
+    }
+    
+    try {
+      const date = new Date(dateString);
+      
+      // Check if date is valid
+      if (isNaN(date.getTime())) {
+        return '';
+      }
+      
+      return date.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      });
+    } catch (err) {
+      console.error('Error formatting date:', err);
+      return '';
+    }
   };
 
   const handleShare = async () => {
@@ -184,7 +233,7 @@ export default function ArticleDetailsScreen() {
 
     try {
       await Share.share({
-        message: `${article.title?.rendered}\n\n${article.link}`,
+        message: `${article.title}\n\n${article.link}`,
         url: article.link,
       });
     } catch (error) {
@@ -217,7 +266,7 @@ export default function ArticleDetailsScreen() {
     );
   }
 
-  const featuredUrl = article._embedded?.['wp:featuredmedia']?.[0]?.source_url;
+  const formattedDate = formatDate(article.published_date);
 
   return (
     <LinearGradient colors={['#1a0033', '#0a0015']} style={styles.container}>
@@ -225,30 +274,42 @@ export default function ArticleDetailsScreen() {
       <SafeAreaView style={{ flex: 1 }}>
         <View style={styles.header}>
           <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-            <IconSymbol name="chevron.left" size={24} color="#fff" />
+            <IconSymbol 
+              ios_icon_name="chevron.left" 
+              android_material_icon_name="arrow-back"
+              size={24} 
+              color="#fff" 
+            />
           </TouchableOpacity>
           <Text style={styles.headerTitle} numberOfLines={1}>
             Article
           </Text>
           <TouchableOpacity style={styles.shareButton} onPress={handleShare}>
-            <IconSymbol name="square.and.arrow.up" size={20} color="#fff" />
+            <IconSymbol 
+              ios_icon_name="square.and.arrow.up" 
+              android_material_icon_name="share"
+              size={20} 
+              color="#fff" 
+            />
           </TouchableOpacity>
         </View>
 
         <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.scrollContent}>
-          {featuredUrl && (
+          {article.featured_image_url && (
             <Image
-              source={{ uri: featuredUrl }}
+              source={{ uri: article.featured_image_url }}
               style={styles.featuredImage}
               resizeMode="cover"
             />
           )}
 
           <View style={styles.contentContainer}>
-            <Text style={styles.title}>{article.title?.rendered || 'Untitled'}</Text>
-            <Text style={styles.date}>{formatDate(article.date)}</Text>
+            <Text style={styles.title}>{article.title || 'Untitled'}</Text>
+            {formattedDate && (
+              <Text style={styles.date}>{formattedDate}</Text>
+            )}
             <Text style={styles.content}>
-              {stripHtml(article.content?.rendered || 'No content available')}
+              {stripHtml(article.content) || 'No content available'}
             </Text>
           </View>
         </ScrollView>

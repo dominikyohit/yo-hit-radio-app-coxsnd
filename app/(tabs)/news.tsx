@@ -1,5 +1,4 @@
 
-import { apiGet } from '@/utils/api';
 import { IconSymbol } from '@/components/IconSymbol';
 import {
   View,
@@ -17,9 +16,9 @@ import { useRouter } from 'expo-router';
 import React, { useState, useEffect } from 'react';
 import { colors } from '@/styles/commonStyles';
 
-// WordPress REST API format
-interface Article {
-  id: number; // WordPress uses numeric IDs
+// WordPress REST API response format
+interface WordPressPost {
+  id: number;
   title: { rendered: string };
   excerpt: { rendered: string };
   content: { rendered: string };
@@ -32,6 +31,18 @@ interface Article {
   };
 }
 
+// Mapped Article object for UI
+interface Article {
+  id: string;
+  title: string;
+  excerpt: string;
+  content: string;
+  featured_image_url: string | null;
+  published_date: string;
+  author: string;
+  created_at: string;
+}
+
 // Helper function to strip HTML tags
 const stripHtml = (html: string): string => {
   return html
@@ -42,6 +53,7 @@ const stripHtml = (html: string): string => {
     .replace(/&gt;/g, '>') // Replace &gt; with >
     .replace(/&quot;/g, '"') // Replace &quot; with "
     .replace(/&#039;/g, "'") // Replace &#039; with '
+    .replace(/&apos;/g, "'") // Replace &apos; with '
     .trim();
 };
 
@@ -155,11 +167,30 @@ export default function NewsScreen() {
       setLoading(true);
       setError(null);
       
-      // Fetch articles from backend API
-      // Backend fetches from WordPress REST API and returns the data
-      const data = await apiGet<Article[]>('/api/articles');
-      console.log('Fetched articles:', data);
-      setArticles(data);
+      // Fetch directly from WordPress REST API
+      const response = await fetch('https://yohitradio.com/wp-json/wp/v2/posts?_embed&per_page=10');
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const wpPosts: WordPressPost[] = await response.json();
+      console.log('Fetched WordPress posts:', wpPosts);
+      
+      // Map WordPress posts to Article format for UI
+      const mappedArticles: Article[] = wpPosts.map((post) => ({
+        id: String(post.id),
+        title: post.title?.rendered ?? '',
+        excerpt: stripHtml(post.excerpt?.rendered ?? ''),
+        content: post.content?.rendered ?? '',
+        featured_image_url: post._embedded?.['wp:featuredmedia']?.[0]?.source_url ?? null,
+        published_date: post.date ?? '',
+        author: 'Yo Hit Radio',
+        created_at: post.date ?? '',
+      }));
+      
+      console.log('Mapped articles:', mappedArticles);
+      setArticles(mappedArticles);
     } catch (err) {
       console.error('Error fetching articles:', err);
       setError('Failed to load articles. Please try again.');
@@ -169,18 +200,34 @@ export default function NewsScreen() {
   };
 
   const formatDate = (dateString: string): string => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
+    // Handle empty or invalid dates
+    if (!dateString) {
+      return '';
+    }
+    
+    try {
+      const date = new Date(dateString);
+      
+      // Check if date is valid
+      if (isNaN(date.getTime())) {
+        return '';
+      }
+      
+      return date.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      });
+    } catch (err) {
+      console.error('Error formatting date:', err);
+      return '';
+    }
   };
 
   const handleArticlePress = (article: Article) => {
     router.push({
       pathname: '/article-details',
-      params: { id: article.id.toString() },
+      params: { id: article.id },
     });
   };
 
@@ -222,9 +269,8 @@ export default function NewsScreen() {
             </View>
           ) : (
             articles.map((article) => {
-              // Extract featured image from _embedded
-              const featuredUrl = article._embedded?.['wp:featuredmedia']?.[0]?.source_url;
-
+              const formattedDate = formatDate(article.published_date);
+              
               return (
                 <TouchableOpacity
                   key={article.id}
@@ -232,21 +278,23 @@ export default function NewsScreen() {
                   onPress={() => handleArticlePress(article)}
                   activeOpacity={0.8}
                 >
-                  {featuredUrl && (
+                  {article.featured_image_url && (
                     <Image
-                      source={{ uri: featuredUrl }}
+                      source={{ uri: article.featured_image_url }}
                       style={styles.articleImage}
                       resizeMode="cover"
                     />
                   )}
                   <View style={styles.articleContent}>
                     <Text style={styles.articleTitle} numberOfLines={2}>
-                      {article.title?.rendered || 'Untitled'}
+                      {article.title || 'Untitled'}
                     </Text>
                     <Text style={styles.articleExcerpt} numberOfLines={2}>
-                      {stripHtml(article.excerpt?.rendered || '')}
+                      {article.excerpt}
                     </Text>
-                    <Text style={styles.articleDate}>{formatDate(article.date)}</Text>
+                    {formattedDate && (
+                      <Text style={styles.articleDate}>{formattedDate}</Text>
+                    )}
                   </View>
                 </TouchableOpacity>
               );
