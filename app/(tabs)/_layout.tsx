@@ -19,6 +19,12 @@ export default function TabLayout() {
       label: 'News',
     },
     {
+      name: 'new-releases',
+      route: '/(tabs)/new-releases',
+      icon: 'album',
+      label: 'New Releases',
+    },
+    {
       name: 'top10',
       route: '/(tabs)/top10',
       icon: 'music-note',
@@ -42,10 +48,11 @@ export default function TabLayout() {
       >
         <Stack.Screen key="index" name="index" />
         <Stack.Screen key="news" name="news" />
+        <Stack.Screen key="new-releases" name="new-releases" />
         <Stack.Screen key="top10" name="top10" />
         <Stack.Screen key="events" name="events" />
       </Stack>
-      <FloatingTabBar tabs={tabs} containerWidth={360} />
+      <FloatingTabBar tabs={tabs} containerWidth={400} />
     </>
   );
 }
