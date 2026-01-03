@@ -358,6 +358,19 @@ export default function HomeScreen() {
               ))}
             </View>
           </View>
+
+          {/* Debug Info (only visible in development) */}
+          {__DEV__ && (
+            <View style={styles.debugSection}>
+              <Text style={styles.debugTitle}>Debug Info</Text>
+              <Text style={styles.debugText}>Stream: {STREAM_URL}</Text>
+              <Text style={styles.debugText}>Title: {trackTitle}</Text>
+              <Text style={styles.debugText}>Artist: {artistName}</Text>
+              <Text style={styles.debugText}>Artwork: {artworkUrl ? 'Yes' : 'No'}</Text>
+              <Text style={styles.debugText}>Playing: {isPlaying ? 'Yes' : 'No'}</Text>
+              <Text style={styles.debugText}>Poll Interval: {METADATA_POLL_INTERVAL / 1000}s</Text>
+            </View>
+          )}
         </ScrollView>
       </SafeAreaView>
     </LinearGradient>
@@ -569,5 +582,24 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.text,
     textAlign: 'center',
+  },
+  debugSection: {
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    borderRadius: 12,
+    padding: 16,
+    marginTop: 20,
+    marginBottom: 20,
+  },
+  debugTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.accent,
+    marginBottom: 12,
+  },
+  debugText: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginBottom: 4,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
   },
 });
