@@ -16,6 +16,7 @@ import {
 import { StatusBar } from "expo-status-bar";
 import { WidgetProvider } from "@/contexts/WidgetContext";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { BACKEND_URL } from "@/utils/api";
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
@@ -30,6 +31,12 @@ export default function RootLayout() {
   const [loaded] = useFonts({
     SpaceMono: require("../assets/fonts/SpaceMono-Regular.ttf"),
   });
+
+  useEffect(() => {
+    // Log backend URL at app startup for debugging
+    console.log('[App] Starting Yo Hit Radio app');
+    console.log('[App] Backend URL:', BACKEND_URL);
+  }, []);
 
   useEffect(() => {
     if (loaded) {

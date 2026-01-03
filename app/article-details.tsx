@@ -1,5 +1,4 @@
 
-import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,32 +10,141 @@ import {
   Platform,
   ActivityIndicator,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { LinearGradient } from 'expo-linear-gradient';
-import { IconSymbol } from '@/components/IconSymbol';
-import { colors } from '@/styles/commonStyles';
 import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
 import { apiGet } from '@/utils/api';
+import { IconSymbol } from '@/components/IconSymbol';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
+import React, { useState, useEffect } from 'react';
+import { colors } from '@/styles/commonStyles';
 
+// WordPress REST API format
 interface Article {
-  id: string;
-  title: string;
-  excerpt: string;
-  content: string;
-  featured_image_url: string | null;
-  published_date: string;
-  author: string;
-  created_at: string;
+  id: number;
+  title: { rendered: string };
+  excerpt: { rendered: string };
+  content: { rendered: string };
+  date: string;
+  link: string;
+  _embedded?: {
+    'wp:featuredmedia'?: Array<{
+      source_url?: string;
+    }>;
+  };
 }
 
+// Helper function to strip HTML tags for simple rendering
+const stripHtml = (html: string): string => {
+  return html
+    .replace(/<[^>]*>/g, '') // Remove HTML tags
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#039;/g, "'")
+    .trim();
+};
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#0a0015',
+  },
+  scrollContent: {
+    paddingBottom: 40,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 16,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#fff',
+    flex: 1,
+  },
+  shareButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  featuredImage: {
+    width: '100%',
+    height: 250,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  contentContainer: {
+    padding: 20,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginBottom: 12,
+    lineHeight: 36,
+  },
+  date: {
+    fontSize: 14,
+    color: '#8b7ab8',
+    marginBottom: 24,
+  },
+  content: {
+    fontSize: 16,
+    color: '#e0d0ff',
+    lineHeight: 26,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  errorText: {
+    color: '#fff',
+    fontSize: 16,
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  retryButton: {
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+    backgroundColor: colors.primary,
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+});
+
 export default function ArticleDetailsScreen() {
-  const router = useRouter();
-  const params = useLocalSearchParams();
-  const { id } = params;
-  
+  const { id } = useLocalSearchParams<{ id: string }>();
   const [article, setArticle] = useState<Article | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const router = useRouter();
 
   useEffect(() => {
     if (id) {
@@ -48,270 +156,103 @@ export default function ArticleDetailsScreen() {
     try {
       setLoading(true);
       setError(null);
-      console.log('[ArticleDetails] Fetching article:', id);
       
-      // TODO: Backend Integration - The GET /api/articles/:id endpoint now fetches
-      // the WordPress RSS feed and finds the specific article by matching the guid
-      // to the id parameter. Returns 404 if article not found in the feed.
-      // The backend returns the article in the same JSON format as the list endpoint.
+      // Fetch article details from backend API
+      // Backend fetches from WordPress REST API and returns the data
       const data = await apiGet<Article>(`/api/articles/${id}`);
-      console.log('[ArticleDetails] Fetched article:', data);
+      console.log('Fetched article:', data);
       setArticle(data);
     } catch (err) {
-      console.error('[ArticleDetails] Error fetching article:', err);
+      console.error('Error fetching article:', err);
       setError('Failed to load article. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
-  const formatDate = (dateString: string) => {
-    try {
-      const date = new Date(dateString);
-      return date.toLocaleDateString('en-US', { 
-        month: 'short', 
-        day: 'numeric', 
-        year: 'numeric' 
-      });
-    } catch {
-      return dateString;
-    }
+  const formatDate = (dateString: string): string => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
   };
 
   const handleShare = async () => {
     if (!article) return;
+
     try {
       await Share.share({
-        message: `Check out this article: ${article.title}`,
-        title: article.title,
+        message: `${article.title?.rendered}\n\n${article.link}`,
+        url: article.link,
       });
     } catch (error) {
-      console.error('Error sharing:', error);
+      console.error('Error sharing article:', error);
     }
   };
 
-  return (
-    <>
-      <Stack.Screen
-        options={{
-          headerShown: false,
-        }}
-      />
-      <LinearGradient
-        colors={[colors.background, colors.card, colors.background]}
-        style={styles.gradient}
-      >
-        <SafeAreaView style={styles.container} edges={['top']}>
-          <View style={styles.header}>
-            <TouchableOpacity
-              style={styles.backButton}
-              onPress={() => router.back()}
-            >
-              <IconSymbol
-                ios_icon_name="chevron.left"
-                android_material_icon_name="arrow-back"
-                size={24}
-                color={colors.text}
-              />
-            </TouchableOpacity>
-            {article && (
-              <TouchableOpacity style={styles.shareButton} onPress={handleShare}>
-                <IconSymbol
-                  ios_icon_name="square.and.arrow.up"
-                  android_material_icon_name="share"
-                  size={24}
-                  color={colors.accent}
-                />
-              </TouchableOpacity>
-            )}
-          </View>
-
-          {loading ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color={colors.accent} />
-              <Text style={styles.loadingText}>Loading article...</Text>
-            </View>
-          ) : error ? (
-            <View style={styles.errorContainer}>
-              <IconSymbol
-                ios_icon_name="exclamationmark.triangle"
-                android_material_icon_name="error"
-                size={48}
-                color={colors.highlight}
-              />
-              <Text style={styles.errorText}>{error}</Text>
-              <TouchableOpacity style={styles.retryButton} onPress={fetchArticle}>
-                <Text style={styles.retryButtonText}>Retry</Text>
-              </TouchableOpacity>
-            </View>
-          ) : article ? (
-            <ScrollView
-              style={styles.scrollView}
-              contentContainerStyle={styles.scrollContent}
-              showsVerticalScrollIndicator={false}
-            >
-              {article.featured_image_url && (
-                <Image
-                  source={{ uri: article.featured_image_url }}
-                  style={styles.headerImage}
-                  resizeMode="cover"
-                />
-              )}
-
-              <View style={styles.contentContainer}>
-                <Text style={styles.title}>{article.title}</Text>
-
-                <View style={styles.metaContainer}>
-                  <View style={styles.dateContainer}>
-                    <IconSymbol
-                      ios_icon_name="calendar"
-                      android_material_icon_name="calendar-today"
-                      size={16}
-                      color={colors.textSecondary}
-                    />
-                    <Text style={styles.date}>
-                      {formatDate(article.published_date)}
-                    </Text>
-                  </View>
-                  <View style={styles.authorContainer}>
-                    <IconSymbol
-                      ios_icon_name="person"
-                      android_material_icon_name="person"
-                      size={16}
-                      color={colors.textSecondary}
-                    />
-                    <Text style={styles.author}>{article.author}</Text>
-                  </View>
-                </View>
-
-                <Text style={styles.content}>{article.content}</Text>
-              </View>
-            </ScrollView>
-          ) : null}
+  if (loading) {
+    return (
+      <LinearGradient colors={['#1a0033', '#0a0015']} style={styles.container}>
+        <Stack.Screen options={{ headerShown: false }} />
+        <SafeAreaView style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
         </SafeAreaView>
       </LinearGradient>
-    </>
+    );
+  }
+
+  if (error || !article) {
+    return (
+      <LinearGradient colors={['#1a0033', '#0a0015']} style={styles.container}>
+        <Stack.Screen options={{ headerShown: false }} />
+        <SafeAreaView style={styles.errorContainer}>
+          <Text style={styles.errorText}>{error || 'Article not found'}</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={() => router.back()}>
+            <Text style={styles.retryButtonText}>Go Back</Text>
+          </TouchableOpacity>
+        </SafeAreaView>
+      </LinearGradient>
+    );
+  }
+
+  const featuredUrl = article._embedded?.['wp:featuredmedia']?.[0]?.source_url;
+
+  return (
+    <LinearGradient colors={['#1a0033', '#0a0015']} style={styles.container}>
+      <Stack.Screen options={{ headerShown: false }} />
+      <SafeAreaView style={{ flex: 1 }}>
+        <View style={styles.header}>
+          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+            <IconSymbol name="chevron.left" size={24} color="#fff" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle} numberOfLines={1}>
+            Article
+          </Text>
+          <TouchableOpacity style={styles.shareButton} onPress={handleShare}>
+            <IconSymbol name="square.and.arrow.up" size={20} color="#fff" />
+          </TouchableOpacity>
+        </View>
+
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.scrollContent}>
+          {featuredUrl && (
+            <Image
+              source={{ uri: featuredUrl }}
+              style={styles.featuredImage}
+              resizeMode="cover"
+            />
+          )}
+
+          <View style={styles.contentContainer}>
+            <Text style={styles.title}>{article.title?.rendered || 'Untitled'}</Text>
+            <Text style={styles.date}>{formatDate(article.date)}</Text>
+            <Text style={styles.content}>
+              {stripHtml(article.content?.rendered || 'No content available')}
+            </Text>
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    </LinearGradient>
   );
 }
-
-const styles = StyleSheet.create({
-  gradient: {
-    flex: 1,
-  },
-  container: {
-    flex: 1,
-    paddingTop: Platform.OS === 'android' ? 20 : 0,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(45, 27, 78, 0.8)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-  },
-  shareButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(45, 27, 78, 0.8)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingBottom: 40,
-  },
-  headerImage: {
-    width: '100%',
-    height: 300,
-    backgroundColor: colors.card,
-  },
-  contentContainer: {
-    padding: 20,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: colors.text,
-    marginBottom: 12,
-    lineHeight: 36,
-  },
-  metaContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 20,
-    gap: 16,
-  },
-  dateContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  date: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    marginLeft: 8,
-  },
-  authorContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  author: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    marginLeft: 8,
-  },
-  content: {
-    fontSize: 16,
-    color: colors.textSecondary,
-    lineHeight: 26,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-  },
-  loadingText: {
-    fontSize: 16,
-    color: colors.textSecondary,
-    marginTop: 16,
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 40,
-  },
-  errorText: {
-    fontSize: 16,
-    color: colors.textSecondary,
-    textAlign: 'center',
-    marginTop: 16,
-    marginBottom: 24,
-  },
-  retryButton: {
-    backgroundColor: colors.accent,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 20,
-  },
-  retryButtonText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: colors.background,
-  },
-});
