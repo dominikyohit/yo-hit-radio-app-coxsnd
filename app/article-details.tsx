@@ -1,4 +1,5 @@
 
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,13 +12,12 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
-import { IconSymbol } from '@/components/IconSymbol';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import React, { useState, useEffect } from 'react';
+import { IconSymbol } from '@/components/IconSymbol';
 import { colors } from '@/styles/commonStyles';
 
-// WordPress REST API response format
+// WordPress API response type
 interface WordPressPost {
   id: number;
   title: { rendered: string };
@@ -32,7 +32,7 @@ interface WordPressPost {
   };
 }
 
-// Mapped Article object for UI
+// Internal article type used by the UI
 interface Article {
   id: string;
   title: string;
@@ -45,119 +45,17 @@ interface Article {
   link: string;
 }
 
-// Helper function to strip HTML tags for simple rendering
-const stripHtml = (html: string): string => {
-  return html
-    .replace(/<[^>]*>/g, '') // Remove HTML tags
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#039;/g, "'")
-    .replace(/&apos;/g, "'")
-    .trim();
-};
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0a0015',
-  },
-  scrollContent: {
-    paddingBottom: 40,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 16,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#fff',
-    flex: 1,
-  },
-  shareButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  featuredImage: {
-    width: '100%',
-    height: 250,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  contentContainer: {
-    padding: 20,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 12,
-    lineHeight: 36,
-  },
-  date: {
-    fontSize: 14,
-    color: '#8b7ab8',
-    marginBottom: 24,
-  },
-  content: {
-    fontSize: 16,
-    color: '#e0d0ff',
-    lineHeight: 26,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  errorText: {
-    color: '#fff',
-    fontSize: 16,
-    textAlign: 'center',
-    marginBottom: 16,
-  },
-  retryButton: {
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
-    backgroundColor: colors.primary,
-  },
-  retryButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-});
+// Helper function to strip HTML tags
+function stripHtml(html: string): string {
+  return html.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
+}
 
 export default function ArticleDetailsScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const router = useRouter();
+  const { id } = useLocalSearchParams();
   const [article, setArticle] = useState<Article | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const router = useRouter();
 
   useEffect(() => {
     if (id) {
@@ -169,31 +67,34 @@ export default function ArticleDetailsScreen() {
     try {
       setLoading(true);
       setError(null);
-      
+      console.log('Fetching article with ID:', id);
+
       // Fetch directly from WordPress REST API
-      const response = await fetch(`https://yohitradio.com/wp-json/wp/v2/posts/${id}?_embed`);
-      
+      const response = await fetch(
+        `https://yohitradio.com/wp-json/wp/v2/posts/${id}?_embed`
+      );
+
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        throw new Error(`Failed to fetch article: ${response.status}`);
       }
-      
-      const wpPost: WordPressPost = await response.json();
-      console.log('Fetched WordPress post:', wpPost);
-      
-      // Map WordPress post to Article format for UI
+
+      const post: WordPressPost = await response.json();
+      console.log('Fetched WordPress post:', post);
+
+      // Map WordPress post to Article interface
       const mappedArticle: Article = {
-        id: String(wpPost.id),
-        title: wpPost.title?.rendered ?? '',
-        excerpt: stripHtml(wpPost.excerpt?.rendered ?? ''),
-        content: wpPost.content?.rendered ?? '',
-        featured_image_url: wpPost._embedded?.['wp:featuredmedia']?.[0]?.source_url ?? null,
-        published_date: wpPost.date ?? '',
+        id: String(post.id),
+        title: post.title?.rendered ?? 'Untitled',
+        excerpt: stripHtml(post.excerpt?.rendered ?? ''),
+        content: post.content?.rendered ?? '',
+        featured_image_url:
+          post._embedded?.['wp:featuredmedia']?.[0]?.source_url ?? null,
+        published_date: post.date ?? '',
         author: 'Yo Hit Radio',
-        created_at: wpPost.date ?? '',
-        link: wpPost.link ?? '',
+        created_at: post.date ?? '',
+        link: post.link ?? '',
       };
-      
-      console.log('Mapped article:', mappedArticle);
+
       setArticle(mappedArticle);
     } catch (err) {
       console.error('Error fetching article:', err);
@@ -204,26 +105,16 @@ export default function ArticleDetailsScreen() {
   };
 
   const formatDate = (dateString: string): string => {
-    // Handle empty or invalid dates
-    if (!dateString) {
-      return '';
-    }
-    
+    if (!dateString) return '';
     try {
       const date = new Date(dateString);
-      
-      // Check if date is valid
-      if (isNaN(date.getTime())) {
-        return '';
-      }
-      
+      if (isNaN(date.getTime())) return '';
       return date.toLocaleDateString('en-US', {
         year: 'numeric',
         month: 'long',
         day: 'numeric',
       });
-    } catch (err) {
-      console.error('Error formatting date:', err);
+    } catch {
       return '';
     }
   };
@@ -233,8 +124,9 @@ export default function ArticleDetailsScreen() {
 
     try {
       await Share.share({
-        message: `${article.title}\n\n${article.link}`,
+        message: `${article.title}\n\n${article.excerpt}\n\nRead more: ${article.link}`,
         url: article.link,
+        title: article.title,
       });
     } catch (error) {
       console.error('Error sharing article:', error);
@@ -243,10 +135,30 @@ export default function ArticleDetailsScreen() {
 
   if (loading) {
     return (
-      <LinearGradient colors={['#1a0033', '#0a0015']} style={styles.container}>
-        <Stack.Screen options={{ headerShown: false }} />
-        <SafeAreaView style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
+      <LinearGradient colors={[colors.primary, colors.secondary]} style={styles.container}>
+        <Stack.Screen
+          options={{
+            headerShown: true,
+            headerTransparent: true,
+            headerTitle: '',
+            headerTintColor: '#fff',
+            headerLeft: () => (
+              <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+                <IconSymbol
+                  ios_icon_name="chevron.left"
+                  android_material_icon_name="arrow-back"
+                  size={24}
+                  color="#fff"
+                />
+              </TouchableOpacity>
+            ),
+          }}
+        />
+        <SafeAreaView style={styles.safeArea}>
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={colors.accent} />
+            <Text style={styles.loadingText}>Loading article...</Text>
+          </View>
         </SafeAreaView>
       </LinearGradient>
     );
@@ -254,66 +166,221 @@ export default function ArticleDetailsScreen() {
 
   if (error || !article) {
     return (
-      <LinearGradient colors={['#1a0033', '#0a0015']} style={styles.container}>
-        <Stack.Screen options={{ headerShown: false }} />
-        <SafeAreaView style={styles.errorContainer}>
-          <Text style={styles.errorText}>{error || 'Article not found'}</Text>
-          <TouchableOpacity style={styles.retryButton} onPress={() => router.back()}>
-            <Text style={styles.retryButtonText}>Go Back</Text>
-          </TouchableOpacity>
+      <LinearGradient colors={[colors.primary, colors.secondary]} style={styles.container}>
+        <Stack.Screen
+          options={{
+            headerShown: true,
+            headerTransparent: true,
+            headerTitle: '',
+            headerTintColor: '#fff',
+            headerLeft: () => (
+              <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+                <IconSymbol
+                  ios_icon_name="chevron.left"
+                  android_material_icon_name="arrow-back"
+                  size={24}
+                  color="#fff"
+                />
+              </TouchableOpacity>
+            ),
+          }}
+        />
+        <SafeAreaView style={styles.safeArea}>
+          <View style={styles.errorContainer}>
+            <IconSymbol
+              ios_icon_name="exclamationmark.triangle"
+              android_material_icon_name="error"
+              size={48}
+              color={colors.accent}
+            />
+            <Text style={styles.errorText}>{error || 'Article not found'}</Text>
+            <TouchableOpacity style={styles.retryButton} onPress={fetchArticle}>
+              <Text style={styles.retryButtonText}>Retry</Text>
+            </TouchableOpacity>
+          </View>
         </SafeAreaView>
       </LinearGradient>
     );
   }
 
-  const formattedDate = formatDate(article.published_date);
-
   return (
-    <LinearGradient colors={['#1a0033', '#0a0015']} style={styles.container}>
-      <Stack.Screen options={{ headerShown: false }} />
-      <SafeAreaView style={{ flex: 1 }}>
-        <View style={styles.header}>
-          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-            <IconSymbol 
-              ios_icon_name="chevron.left" 
-              android_material_icon_name="arrow-back"
-              size={24} 
-              color="#fff" 
-            />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle} numberOfLines={1}>
-            Article
-          </Text>
-          <TouchableOpacity style={styles.shareButton} onPress={handleShare}>
-            <IconSymbol 
-              ios_icon_name="square.and.arrow.up" 
-              android_material_icon_name="share"
-              size={20} 
-              color="#fff" 
-            />
-          </TouchableOpacity>
-        </View>
+    <LinearGradient colors={[colors.primary, colors.secondary]} style={styles.container}>
+      <Stack.Screen
+        options={{
+          headerShown: true,
+          headerTransparent: true,
+          headerTitle: '',
+          headerTintColor: '#fff',
+          headerLeft: () => (
+            <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+              <IconSymbol
+                ios_icon_name="chevron.left"
+                android_material_icon_name="arrow-back"
+                size={24}
+                color="#fff"
+              />
+            </TouchableOpacity>
+          ),
+          headerRight: () => (
+            <TouchableOpacity onPress={handleShare} style={styles.shareButton}>
+              <IconSymbol
+                ios_icon_name="square.and.arrow.up"
+                android_material_icon_name="share"
+                size={24}
+                color="#fff"
+              />
+            </TouchableOpacity>
+          ),
+        }}
+      />
+      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
+        {article.featured_image_url && (
+          <Image
+            source={{ uri: article.featured_image_url }}
+            style={styles.featuredImage}
+            resizeMode="cover"
+          />
+        )}
 
-        <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.scrollContent}>
-          {article.featured_image_url && (
-            <Image
-              source={{ uri: article.featured_image_url }}
-              style={styles.featuredImage}
-              resizeMode="cover"
-            />
-          )}
+        <View style={styles.contentContainer}>
+          <Text style={styles.title}>{article.title}</Text>
 
-          <View style={styles.contentContainer}>
-            <Text style={styles.title}>{article.title || 'Untitled'}</Text>
-            {formattedDate && (
-              <Text style={styles.date}>{formattedDate}</Text>
-            )}
-            <Text style={styles.content}>
-              {stripHtml(article.content) || 'No content available'}
-            </Text>
+          <View style={styles.metaContainer}>
+            <View style={styles.metaItem}>
+              <IconSymbol
+                ios_icon_name="calendar"
+                android_material_icon_name="calendar-today"
+                size={16}
+                color={colors.textSecondary}
+              />
+              <Text style={styles.metaText}>{formatDate(article.published_date)}</Text>
+            </View>
+            <View style={styles.metaItem}>
+              <IconSymbol
+                ios_icon_name="person"
+                android_material_icon_name="person"
+                size={16}
+                color={colors.textSecondary}
+              />
+              <Text style={styles.metaText}>{article.author}</Text>
+            </View>
           </View>
-        </ScrollView>
-      </SafeAreaView>
+
+          <View style={styles.divider} />
+
+          <Text style={styles.content}>{stripHtml(article.content)}</Text>
+        </View>
+      </ScrollView>
     </LinearGradient>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  safeArea: {
+    flex: 1,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: 40,
+  },
+  backButton: {
+    marginLeft: 16,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  shareButton: {
+    marginRight: 16,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  featuredImage: {
+    width: '100%',
+    height: 300,
+    marginTop: Platform.OS === 'ios' ? 0 : 60,
+  },
+  contentContainer: {
+    padding: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    marginTop: -24,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginBottom: 16,
+    lineHeight: 36,
+  },
+  metaContainer: {
+    flexDirection: 'row',
+    gap: 20,
+    marginBottom: 16,
+  },
+  metaItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  metaText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    marginVertical: 20,
+  },
+  content: {
+    fontSize: 16,
+    lineHeight: 26,
+    color: 'rgba(255, 255, 255, 0.9)',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 16,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#fff',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 16,
+    padding: 40,
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#fff',
+    textAlign: 'center',
+  },
+  retryButton: {
+    marginTop: 16,
+    paddingHorizontal: 32,
+    paddingVertical: 12,
+    backgroundColor: colors.accent,
+    borderRadius: 24,
+  },
+  retryButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
+  },
+});

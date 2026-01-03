@@ -1,7 +1,8 @@
+
 {
   "expo": {
     "name": "Yo Hit Radio",
-    "slug": "Yo Hit Radio",
+    "slug": "yohitradio",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/natively-dark.png",
@@ -14,9 +15,12 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.anonymous.Natively",
+      "bundleIdentifier": "com.yohitradio.app",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "UIBackgroundModes": [
+          "remote-notification"
+        ]
       }
     },
     "android": {
@@ -25,7 +29,10 @@
         "backgroundColor": "#000000"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.anonymous.Natively"
+      "package": "com.yohitradio.app",
+      "permissions": [
+        "POST_NOTIFICATIONS"
+      ]
     },
     "web": {
       "favicon": "./assets/images/final_quest_240x240.png",
@@ -34,7 +41,13 @@
     "plugins": [
       "expo-font",
       "expo-router",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "react-native-onesignal",
+        {
+          "mode": "production"
+        }
+      ]
     ],
     "scheme": "yohitradio",
     "experiments": {
@@ -42,8 +55,10 @@
     },
     "extra": {
       "router": {},
-      "backendUrl": "https://3xedeh9y77sk8qu3xzuw6cfa4n5b92rj.app.specular.dev"
+      "eas": {
+        "projectId": "YOUR_EAS_PROJECT_ID"
+      },
+      "oneSignalAppId": ""
     }
-  },
-  "scheme": "Yo Hit Radio"
+  }
 }

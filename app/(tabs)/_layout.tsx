@@ -30,6 +30,12 @@ export default function TabLayout() {
       icon: 'event',
       label: 'Events',
     },
+    {
+      name: 'profile',
+      route: '/(tabs)/profile',
+      icon: 'person',
+      label: 'Profile',
+    },
   ];
 
   return (
@@ -44,8 +50,9 @@ export default function TabLayout() {
         <Stack.Screen key="news" name="news" />
         <Stack.Screen key="top10" name="top10" />
         <Stack.Screen key="events" name="events" />
+        <Stack.Screen key="profile" name="profile" />
       </Stack>
-      <FloatingTabBar tabs={tabs} containerWidth={360} />
+      <FloatingTabBar tabs={tabs} containerWidth={400} />
     </>
   );
 }
