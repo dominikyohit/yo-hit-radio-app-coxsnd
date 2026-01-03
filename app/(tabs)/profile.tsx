@@ -1,10 +1,9 @@
 
 import { useTheme } from "@react-navigation/native";
-import React, { useState, useEffect } from "react";
+import React from "react";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { IconSymbol } from "@/components/IconSymbol";
-import { View, Text, StyleSheet, ScrollView, Platform, Switch, Alert } from "react-native";
-import { NotificationService } from "@/utils/notifications";
+import { View, Text, StyleSheet, ScrollView, Platform } from "react-native";
 import { colors } from "@/styles/commonStyles";
 
 const styles = StyleSheet.create({
@@ -15,6 +14,31 @@ const styles = StyleSheet.create({
   content: {
     padding: 20,
   },
+  header: {
+    alignItems: "center",
+    marginBottom: 32,
+    paddingTop: 20,
+  },
+  profileIcon: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: "rgba(255, 215, 0, 0.2)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 16,
+  },
+  appName: {
+    fontSize: 28,
+    fontWeight: "bold",
+    color: "#FFD700",
+    marginBottom: 8,
+  },
+  tagline: {
+    fontSize: 16,
+    color: "rgba(255, 255, 255, 0.7)",
+    textAlign: "center",
+  },
   section: {
     marginBottom: 24,
   },
@@ -24,83 +48,88 @@ const styles = StyleSheet.create({
     color: "#fff",
     marginBottom: 12,
   },
-  settingRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
+  infoCard: {
     backgroundColor: "rgba(255, 255, 255, 0.1)",
     padding: 16,
     borderRadius: 12,
     marginBottom: 8,
   },
-  settingLabel: {
+  infoLabel: {
+    fontSize: 14,
+    color: "rgba(255, 255, 255, 0.6)",
+    marginBottom: 4,
+  },
+  infoValue: {
     fontSize: 16,
     color: "#fff",
+    fontWeight: "500",
   },
-  settingDescription: {
-    fontSize: 12,
-    color: "rgba(255, 255, 255, 0.6)",
-    marginTop: 4,
+  footer: {
+    alignItems: "center",
+    marginTop: 32,
+    paddingBottom: 32,
+  },
+  version: {
+    fontSize: 14,
+    color: "rgba(255, 255, 255, 0.5)",
   },
 });
 
 export default function ProfileScreen() {
-  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const theme = useTheme();
-
-  useEffect(() => {
-    checkNotificationPermission();
-  }, []);
-
-  const checkNotificationPermission = async () => {
-    const enabled = await NotificationService.areNotificationsEnabled();
-    setNotificationsEnabled(enabled);
-  };
-
-  const handleNotificationToggle = async (value: boolean) => {
-    if (value) {
-      const granted = await NotificationService.requestPermissions();
-      if (granted) {
-        await NotificationService.initialize();
-        setNotificationsEnabled(true);
-        Alert.alert(
-          "Notifications Enabled",
-          "You'll receive notifications when new articles are published."
-        );
-      } else {
-        Alert.alert(
-          "Permission Denied",
-          "Please enable notifications in your device settings to receive updates."
-        );
-      }
-    } else {
-      setNotificationsEnabled(false);
-      Alert.alert(
-        "Notifications Disabled",
-        "You won't receive push notifications anymore."
-      );
-    }
-  };
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
       <ScrollView style={styles.content}>
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Notifications</Text>
-          <View style={styles.settingRow}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.settingLabel}>Push Notifications</Text>
-              <Text style={styles.settingDescription}>
-                Get notified when new articles are published
-              </Text>
-            </View>
-            <Switch
-              value={notificationsEnabled}
-              onValueChange={handleNotificationToggle}
-              trackColor={{ false: "#767577", true: "#FFD700" }}
-              thumbColor={notificationsEnabled ? "#fff" : "#f4f3f4"}
+        <View style={styles.header}>
+          <View style={styles.profileIcon}>
+            <IconSymbol
+              ios_icon_name="radio"
+              android_material_icon_name="radio"
+              size={50}
+              color="#FFD700"
             />
           </View>
+          <Text style={styles.appName}>Yo Hit Radio</Text>
+          <Text style={styles.tagline}>Your favorite hits, all day long</Text>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>About</Text>
+          <View style={styles.infoCard}>
+            <Text style={styles.infoLabel}>Station</Text>
+            <Text style={styles.infoValue}>Yo Hit Radio</Text>
+          </View>
+          <View style={styles.infoCard}>
+            <Text style={styles.infoLabel}>Stream Quality</Text>
+            <Text style={styles.infoValue}>High Quality (128kbps)</Text>
+          </View>
+          <View style={styles.infoCard}>
+            <Text style={styles.infoLabel}>Platform</Text>
+            <Text style={styles.infoValue}>
+              {Platform.OS === "ios" ? "iOS" : Platform.OS === "android" ? "Android" : "Web"}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Features</Text>
+          <View style={styles.infoCard}>
+            <Text style={styles.infoValue}>🎵 Live Radio Streaming</Text>
+          </View>
+          <View style={styles.infoCard}>
+            <Text style={styles.infoValue}>📰 Latest News & Articles</Text>
+          </View>
+          <View style={styles.infoCard}>
+            <Text style={styles.infoValue}>🔥 Weekly Top 10 Chart</Text>
+          </View>
+          <View style={styles.infoCard}>
+            <Text style={styles.infoValue}>🎉 Upcoming Events</Text>
+          </View>
+        </View>
+
+        <View style={styles.footer}>
+          <Text style={styles.version}>Version 1.0.0</Text>
         </View>
       </ScrollView>
     </SafeAreaView>

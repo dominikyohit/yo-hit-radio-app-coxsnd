@@ -6,6 +6,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/natively-dark.png",
+    "scheme": "natively",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
@@ -35,14 +36,7 @@
     "plugins": [
       "expo-font",
       "expo-router",
-      "expo-web-browser",
-      [
-        "expo-notifications",
-        {
-          "icon": "./assets/images/natively-dark.png",
-          "color": "#000000"
-        }
-      ]
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true
@@ -50,6 +44,5 @@
     "extra": {
       "router": {}
     }
-  },
-  "scheme": "natively"
+  }
 }
