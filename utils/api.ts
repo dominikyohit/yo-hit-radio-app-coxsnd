@@ -1,4 +1,3 @@
-
 /**
  * API Utilities Template
  *
@@ -29,15 +28,6 @@ import * as SecureStore from "expo-secure-store";
  * It is set automatically when the backend is deployed
  */
 export const BACKEND_URL = Constants.expoConfig?.extra?.backendUrl || "";
-
-/**
- * OneSignal App ID from environment or app.json
- */
-export const ONESIGNAL_APP_ID = Constants.expoConfig?.extra?.oneSignalAppId || process.env.EXPO_PUBLIC_ONESIGNAL_APP_ID || "";
-
-// Log backend URL on module load for debugging
-console.log('[API] Backend URL configured:', BACKEND_URL);
-console.log('[API] OneSignal App ID configured:', ONESIGNAL_APP_ID ? '✅ Set' : '❌ Not set');
 
 /**
  * Bearer token storage key

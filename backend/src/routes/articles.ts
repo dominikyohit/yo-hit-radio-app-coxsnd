@@ -1,43 +1,43 @@
 import type { App } from '../index.js';
 import type { FastifyRequest, FastifyReply } from 'fastify';
-import { eq } from 'drizzle-orm';
+import { desc, eq } from 'drizzle-orm';
 import * as schema from '../db/schema.js';
 
 export function registerArticlesRoutes(app: App) {
   const requireAuth = app.requireAuth();
 
-  // GET /api/articles - list all articles from WordPress REST API
+  // GET /api/articles - list all articles (sorted by date, newest first)
   app.fastify.get(
     '/api/articles',
     {
       schema: {
-        description: 'Get all articles from WordPress REST API with embedded featured media',
+        description: 'Get all articles sorted by published date (newest first)',
         tags: ['articles'],
         response: {
           200: {
             type: 'array',
             items: {
               type: 'object',
+              properties: {
+                id: { type: 'string' },
+                title: { type: 'string' },
+                excerpt: { type: 'string' },
+                content: { type: 'string' },
+                featured_image_url: { type: ['string', 'null'] },
+                published_date: { type: 'string' },
+                author: { type: 'string' },
+                created_at: { type: 'string' },
+              },
             },
           },
         },
       },
     },
     async () => {
-      try {
-        const response = await fetch(
-          'https://yohitradio.com/wp-json/wp/v2/posts?_embed&per_page=10'
-        );
-        if (!response.ok) {
-          throw new Error(`Failed to fetch articles: ${response.statusText}`);
-        }
-
-        const articles = await response.json();
-        return articles;
-      } catch (error) {
-        app.logger.error('Error in GET /api/articles');
-        throw new Error('Failed to fetch articles');
-      }
+      return app.db
+        .select()
+        .from(schema.articles)
+        .orderBy(desc(schema.articles.published_date));
     }
   );
 
@@ -46,38 +46,41 @@ export function registerArticlesRoutes(app: App) {
     '/api/articles/:id',
     {
       schema: {
-        description: 'Get a single article by ID from WordPress REST API with embedded featured media',
+        description: 'Get a single article by ID',
         tags: ['articles'],
         params: {
           type: 'object',
           properties: {
-            id: { type: ['string', 'number'] },
+            id: { type: 'string' },
           },
           required: ['id'],
         },
         response: {
           200: {
             type: 'object',
+            properties: {
+              id: { type: 'string' },
+              title: { type: 'string' },
+              excerpt: { type: 'string' },
+              content: { type: 'string' },
+              featured_image_url: { type: ['string', 'null'] },
+              published_date: { type: 'string' },
+              author: { type: 'string' },
+              created_at: { type: 'string' },
+            },
           },
         },
       },
     },
     async (request: FastifyRequest) => {
-      try {
-        const { id } = request.params as { id: string | number };
-        const response = await fetch(
-          `https://yohitradio.com/wp-json/wp/v2/posts/${id}?_embed`
-        );
-        if (!response.ok) {
-          throw new Error(`Article not found`);
-        }
-
-        const article = await response.json();
-        return article;
-      } catch (error) {
-        app.logger.error('Error in GET /api/articles/:id');
-        throw new Error('Failed to fetch article');
+      const { id } = request.params as { id: string };
+      const article = await app.db.query.articles.findFirst({
+        where: eq(schema.articles.id, id),
+      });
+      if (!article) {
+        throw new Error('Article not found');
       }
+      return article;
     }
   );
 
