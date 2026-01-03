@@ -29,6 +29,9 @@ import * as SecureStore from "expo-secure-store";
  */
 export const BACKEND_URL = Constants.expoConfig?.extra?.backendUrl || "";
 
+// Log backend URL on module load for debugging
+console.log('[API] Backend URL configured:', BACKEND_URL);
+
 /**
  * Bearer token storage key
  * Matches the key used in lib/auth.ts

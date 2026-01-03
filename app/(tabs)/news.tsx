@@ -43,6 +43,18 @@ export default function NewsScreen() {
       setLoading(true);
       setError(null);
       console.log('[News] Fetching articles from API...');
+      
+      // TODO: Backend Integration - The GET /api/articles endpoint now fetches and parses
+      // the WordPress RSS feed from https://yohitradio.com/category/news/feed/
+      // The backend transforms RSS XML into JSON with the following structure:
+      // - id: guid from RSS
+      // - title: title from RSS
+      // - excerpt: first 200 chars of description (HTML stripped)
+      // - content: full description from RSS (HTML allowed)
+      // - featured_image_url: media:content or enclosure URL from RSS
+      // - published_date: pubDate from RSS (ISO format)
+      // - author: dc:creator or "Yo Hit Radio" as default
+      // - created_at: same as published_date
       const data = await apiGet<Article[]>('/api/articles');
       console.log('[News] Fetched articles:', data);
       setArticles(data);

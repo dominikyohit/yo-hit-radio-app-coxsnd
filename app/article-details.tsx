@@ -49,6 +49,11 @@ export default function ArticleDetailsScreen() {
       setLoading(true);
       setError(null);
       console.log('[ArticleDetails] Fetching article:', id);
+      
+      // TODO: Backend Integration - The GET /api/articles/:id endpoint now fetches
+      // the WordPress RSS feed and finds the specific article by matching the guid
+      // to the id parameter. Returns 404 if article not found in the feed.
+      // The backend returns the article in the same JSON format as the list endpoint.
       const data = await apiGet<Article>(`/api/articles/${id}`);
       console.log('[ArticleDetails] Fetched article:', data);
       setArticle(data);
