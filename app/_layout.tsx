@@ -16,7 +16,6 @@ import {
 } from "@react-navigation/native";
 import { StatusBar } from "expo-status-bar";
 import { WidgetProvider } from "@/contexts/WidgetContext";
-import { NotificationService } from "@/utils/notifications";
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
@@ -32,19 +31,13 @@ export default function RootLayout() {
     SpaceMono: require("../assets/fonts/SpaceMono-Regular.ttf"),
   });
 
-  // Initialize OneSignal push notifications
-  useEffect(() => {
-    console.log('🔔 Initializing OneSignal push notifications...');
-    NotificationService.initialize();
-  }, []);
-
   useEffect(() => {
     if (loaded) {
       SplashScreen.hideAsync();
     }
   }, [loaded]);
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (
       !networkState.isConnected &&
       networkState.isInternetReachable === false
@@ -95,24 +88,6 @@ export default function RootLayout() {
             <Stack>
               {/* Main app with tabs */}
               <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-
-              {/* Article Details Screen - for navigation from notifications */}
-              <Stack.Screen 
-                name="article-details" 
-                options={{ 
-                  headerShown: false,
-                  presentation: 'card'
-                }} 
-              />
-
-              {/* Event Details Screen */}
-              <Stack.Screen 
-                name="event-details" 
-                options={{ 
-                  headerShown: false,
-                  presentation: 'card'
-                }} 
-              />
 
               {/* Modal Demo Screens */}
               <Stack.Screen

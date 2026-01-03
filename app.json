@@ -1,8 +1,7 @@
-
 {
   "expo": {
     "name": "Yo Hit Radio",
-    "slug": "yohitradio",
+    "slug": "Yo Hit Radio",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/natively-dark.png",
@@ -60,5 +59,6 @@
       },
       "oneSignalAppId": ""
     }
-  }
+  },
+  "scheme": "Yo Hit Radio"
 }
