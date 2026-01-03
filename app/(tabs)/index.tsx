@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -23,21 +23,26 @@ import Animated, {
   withTiming,
   Easing,
 } from 'react-native-reanimated';
-import { BACKEND_URL } from '@/utils/api';
+import { getZenoMetadata, ZenoMetadata } from '@/utils/zenoMetadata';
 
 const { width } = Dimensions.get('window');
+const STREAM_URL = 'https://stream.zeno.fm/hmc38shnrwzuv';
+const METADATA_POLL_INTERVAL = 10000; // Poll every 10 seconds
+const LOGO_FALLBACK = 'https://prod-finalquest-user-projects-storage-bucket-aws.s3.amazonaws.com/user-projects/ee56f6a2-c621-44e1-862b-ddbf7d8dce99/assets/images/14c4a560-f518-4dca-a82d-8b2977bf3151.jpeg?AWSAccessKeyId=AKIAVRUVRKQJC5DISQ4Q&Signature=H%2FNEhs3zjnqZmCe9uI37GWADHBc%3D&Expires=1767494669';
 
 export default function HomeScreen() {
   const router = useRouter();
   const [sound, setSound] = useState<Audio.Sound | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  
+  // Metadata state
+  const [trackTitle, setTrackTitle] = useState('Yo Hit Radio');
+  const [artistName, setArtistName] = useState('Live Stream');
+  const [artworkUrl, setArtworkUrl] = useState<string | undefined>(undefined);
+  
   const rotation = useSharedValue(0);
-
-  // Log backend URL on mount for debugging
-  useEffect(() => {
-    console.log('[App] Backend URL configured:', BACKEND_URL);
-  }, []);
+  const metadataIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Animated rotation for the play button
   const animatedStyle = useAnimatedStyle(() => {
@@ -46,21 +51,43 @@ export default function HomeScreen() {
     };
   });
 
+  // Configure audio on mount
   useEffect(() => {
+    console.log('[Home] ========================================');
+    console.log('[Home] Component mounted - initializing');
+    console.log('[Home] Stream URL:', STREAM_URL);
+    console.log('[Home] Metadata poll interval:', METADATA_POLL_INTERVAL, 'ms');
+    
     // Configure audio mode
     Audio.setAudioModeAsync({
       playsInSilentModeIOS: true,
       staysActiveInBackground: true,
       shouldDuckAndroid: true,
+    }).then(() => {
+      console.log('[Home] Audio mode configured successfully');
+    }).catch((error) => {
+      console.error('[Home] Error configuring audio mode:', error);
     });
 
+    // Fetch initial metadata immediately
+    console.log('[Home] Fetching initial metadata...');
+    fetchMetadata();
+    
+    // Start polling metadata
+    startMetadataPolling();
+
     return () => {
+      console.log('[Home] Component unmounting - cleaning up');
       if (sound) {
+        console.log('[Home] Unloading audio...');
         sound.unloadAsync();
       }
+      stopMetadataPolling();
+      console.log('[Home] ========================================');
     };
   }, []);
 
+  // Handle play button animation
   useEffect(() => {
     if (isPlaying) {
       rotation.value = withRepeat(
@@ -73,29 +100,106 @@ export default function HomeScreen() {
     }
   }, [isPlaying]);
 
+  // Metadata fetching function
+  const fetchMetadata = async () => {
+    try {
+      console.log('[Home] ----------------------------------------');
+      console.log('[Home] Fetching metadata at:', new Date().toISOString());
+      
+      const metadata: ZenoMetadata = await getZenoMetadata();
+      
+      console.log('[Home] Metadata received:', {
+        title: metadata.title,
+        artist: metadata.artist,
+        hasArtwork: !!metadata.artworkUrl,
+      });
+
+      // Update UI state
+      setTrackTitle(metadata.title);
+      setArtistName(metadata.artist);
+      setArtworkUrl(metadata.artworkUrl);
+      
+      console.log('[Home] UI updated with new metadata');
+      console.log('[Home] ----------------------------------------');
+    } catch (error) {
+      console.error('[Home] ❌ Metadata fetch error:', error);
+      console.log('[Home] Keeping existing values:', {
+        title: trackTitle,
+        artist: artistName,
+      });
+      console.log('[Home] ----------------------------------------');
+    }
+  };
+
+  // Start metadata polling
+  const startMetadataPolling = () => {
+    console.log('[Home] Starting metadata polling');
+    console.log('[Home] Poll interval:', METADATA_POLL_INTERVAL / 1000, 'seconds');
+    
+    // Clear any existing interval
+    if (metadataIntervalRef.current) {
+      console.log('[Home] Clearing existing polling interval');
+      clearInterval(metadataIntervalRef.current);
+    }
+
+    // Poll metadata at regular intervals
+    metadataIntervalRef.current = setInterval(() => {
+      console.log('[Home] 🔄 Polling metadata (interval tick)');
+      fetchMetadata();
+    }, METADATA_POLL_INTERVAL);
+    
+    console.log('[Home] Metadata polling started successfully');
+  };
+
+  // Stop metadata polling
+  const stopMetadataPolling = () => {
+    console.log('[Home] Stopping metadata polling');
+    if (metadataIntervalRef.current) {
+      clearInterval(metadataIntervalRef.current);
+      metadataIntervalRef.current = null;
+      console.log('[Home] Metadata polling stopped');
+    }
+  };
+
   const togglePlayback = async () => {
     try {
+      console.log('[Home] ========================================');
+      console.log('[Home] Toggle playback - current state:', isPlaying ? 'PLAYING' : 'STOPPED');
+      
       if (sound) {
         if (isPlaying) {
+          console.log('[Home] Pausing audio...');
           await sound.pauseAsync();
           setIsPlaying(false);
+          console.log('[Home] Audio paused');
         } else {
+          console.log('[Home] Resuming audio...');
           await sound.playAsync();
           setIsPlaying(true);
+          console.log('[Home] Audio resumed');
         }
       } else {
+        console.log('[Home] Creating new audio instance...');
+        console.log('[Home] Stream URL:', STREAM_URL);
         setIsLoading(true);
+        
         const { sound: newSound } = await Audio.Sound.createAsync(
-          { uri: 'https://stream.zeno.fm/hmc38shnrwzuv' },
+          { uri: STREAM_URL },
           { shouldPlay: true }
         );
+        
+        console.log('[Home] Audio instance created successfully');
         setSound(newSound);
         setIsPlaying(true);
         setIsLoading(false);
+        console.log('[Home] Audio started playing');
       }
+      
+      console.log('[Home] ========================================');
     } catch (error) {
-      console.error('Error playing audio:', error);
+      console.error('[Home] ❌ Error toggling playback:', error);
       setIsLoading(false);
+      console.log('[Home] ========================================');
     }
   };
 
@@ -119,7 +223,7 @@ export default function HomeScreen() {
           {/* Logo Section */}
           <View style={styles.logoSection}>
             <Image
-              source={{ uri: 'https://prod-finalquest-user-projects-storage-bucket-aws.s3.amazonaws.com/user-projects/ee56f6a2-c621-44e1-862b-ddbf7d8dce99/assets/images/14c4a560-f518-4dca-a82d-8b2977bf3151.jpeg?AWSAccessKeyId=AKIAVRUVRKQJC5DISQ4Q&Signature=H%2FNEhs3zjnqZmCe9uI37GWADHBc%3D&Expires=1767494669' }}
+              source={{ uri: LOGO_FALLBACK }}
               style={styles.logo}
               resizeMode="contain"
             />
@@ -142,18 +246,35 @@ export default function HomeScreen() {
             </View>
             
             <View style={styles.nowPlayingContent}>
-              <View style={styles.coverPlaceholder}>
-                <IconSymbol
-                  ios_icon_name="music.note"
-                  android_material_icon_name="music-note"
-                  size={48}
-                  color={colors.accent}
+              {/* Album artwork or fallback icon */}
+              {artworkUrl ? (
+                <Image
+                  source={{ uri: artworkUrl }}
+                  style={styles.coverImage}
+                  resizeMode="cover"
+                  onError={(error) => {
+                    console.log('[Home] Artwork failed to load:', error.nativeEvent.error);
+                    setArtworkUrl(undefined);
+                  }}
                 />
-              </View>
+              ) : (
+                <View style={styles.coverPlaceholder}>
+                  <IconSymbol
+                    ios_icon_name="music.note"
+                    android_material_icon_name="music-note"
+                    size={48}
+                    color={colors.accent}
+                  />
+                </View>
+              )}
               
               <View style={styles.trackInfo}>
-                <Text style={styles.trackTitle}>Yo Hit Radio</Text>
-                <Text style={styles.trackArtist}>Live Stream</Text>
+                <Text style={styles.trackTitle} numberOfLines={2}>
+                  {trackTitle}
+                </Text>
+                <Text style={styles.trackArtist} numberOfLines={1}>
+                  {artistName}
+                </Text>
                 <View style={styles.liveStatusBadge}>
                   <View style={styles.liveStatusDot} />
                   <Text style={styles.liveStatusText}>ON AIR</Text>
@@ -234,6 +355,19 @@ export default function HomeScreen() {
               ))}
             </View>
           </View>
+
+          {/* Debug Info (only visible in development) */}
+          {__DEV__ && (
+            <View style={styles.debugSection}>
+              <Text style={styles.debugTitle}>Debug Info</Text>
+              <Text style={styles.debugText}>Stream: {STREAM_URL}</Text>
+              <Text style={styles.debugText}>Title: {trackTitle}</Text>
+              <Text style={styles.debugText}>Artist: {artistName}</Text>
+              <Text style={styles.debugText}>Artwork: {artworkUrl ? 'Yes' : 'No'}</Text>
+              <Text style={styles.debugText}>Playing: {isPlaying ? 'Yes' : 'No'}</Text>
+              <Text style={styles.debugText}>Poll Interval: {METADATA_POLL_INTERVAL / 1000}s</Text>
+            </View>
+          )}
         </ScrollView>
       </SafeAreaView>
     </LinearGradient>
@@ -323,6 +457,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 16,
+  },
+  coverImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 12,
+    marginRight: 16,
+    backgroundColor: 'rgba(107, 70, 193, 0.3)',
   },
   trackInfo: {
     flex: 1,
@@ -438,5 +579,24 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.text,
     textAlign: 'center',
+  },
+  debugSection: {
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    borderRadius: 12,
+    padding: 16,
+    marginTop: 20,
+    marginBottom: 20,
+  },
+  debugTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.accent,
+    marginBottom: 12,
+  },
+  debugText: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginBottom: 4,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
   },
 });
