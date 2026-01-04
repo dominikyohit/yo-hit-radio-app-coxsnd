@@ -41,6 +41,7 @@ interface Song {
   coverImage: string | null;
   audioUrl: string;
   releaseDate: string;
+  sortDate: Date; // Used for sorting
 }
 
 const SONGS_API_URL = 'https://yohitradio.com/wp-json/wp/v2/song?per_page=10&orderby=date&order=desc&_embed';
@@ -70,16 +71,38 @@ export default function NewReleasesScreen() {
       const response = await fetch(SONGS_API_URL);
       const data: WordPressSong[] = await response.json();
 
-      const formattedSongs: Song[] = data.map((song) => ({
-        id: song.id,
-        title: song.title.rendered,
-        artist: song.acf?.artist_name || 'Unknown Artist',
-        coverImage: song._embedded?.['wp:featuredmedia']?.[0]?.source_url || null,
-        audioUrl: song.acf?.audio_url || '',
-        releaseDate: formatDate(song.acf?.release_date, song.date),
-      }));
+      const formattedSongs: Song[] = data.map((song) => {
+        // Determine which date to use for sorting
+        let sortDate: Date;
+        
+        // Try to use release_date first
+        if (song.acf?.release_date && /^\d{8}$/.test(song.acf.release_date)) {
+          const year = song.acf.release_date.substring(0, 4);
+          const month = song.acf.release_date.substring(4, 6);
+          const day = song.acf.release_date.substring(6, 8);
+          sortDate = new Date(`${year}-${month}-${day}`);
+        } else {
+          // Fallback to post publish date
+          sortDate = new Date(song.date);
+        }
 
-      setSongs(formattedSongs);
+        return {
+          id: song.id,
+          title: song.title.rendered,
+          artist: song.acf?.artist_name || 'Unknown Artist',
+          coverImage: song._embedded?.['wp:featuredmedia']?.[0]?.source_url || null,
+          audioUrl: song.acf?.audio_url || '',
+          releaseDate: formatDate(song.acf?.release_date, song.date),
+          sortDate: sortDate,
+        };
+      });
+
+      // Sort by release date from newest to oldest
+      const sortedSongs = formattedSongs.sort((a, b) => {
+        return b.sortDate.getTime() - a.sortDate.getTime();
+      });
+
+      setSongs(sortedSongs);
     } catch (error) {
       console.error('Error fetching songs:', error);
     } finally {
