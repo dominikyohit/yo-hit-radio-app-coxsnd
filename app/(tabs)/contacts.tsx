@@ -15,15 +15,27 @@ import { IconSymbol } from '@/components/IconSymbol';
 
 export default function ContactsScreen() {
   const handleEmail = () => {
-    Linking.openURL('mailto:info@yohitradio.com');
+    Linking.openURL('mailto:contact@yohitradio.com');
   };
 
   const handlePhone = () => {
-    Linking.openURL('tel:+1234567890');
+    Linking.openURL('tel:+12637662648');
   };
 
   const handleWebsite = () => {
     Linking.openURL('https://yohitradio.com');
+  };
+
+  const handleFacebook = () => {
+    Linking.openURL('https://www.facebook.com/yohitradiohaiti');
+  };
+
+  const handleInstagram = () => {
+    Linking.openURL('https://www.instagram.com/yohitradio');
+  };
+
+  const handleTikTok = () => {
+    Linking.openURL('https://www.tiktok.com/@yohitradio');
   };
 
   return (
@@ -54,7 +66,7 @@ export default function ContactsScreen() {
               </View>
               <View style={styles.contactInfo}>
                 <Text style={styles.contactLabel}>Email</Text>
-                <Text style={styles.contactValue}>info@yohitradio.com</Text>
+                <Text style={styles.contactValue}>contact@yohitradio.com</Text>
               </View>
               <IconSymbol 
                 ios_icon_name="chevron.right" 
@@ -75,7 +87,7 @@ export default function ContactsScreen() {
               </View>
               <View style={styles.contactInfo}>
                 <Text style={styles.contactLabel}>Phone</Text>
-                <Text style={styles.contactValue}>+1 (234) 567-890</Text>
+                <Text style={styles.contactValue}>+1 (263) 766-2648</Text>
               </View>
               <IconSymbol 
                 ios_icon_name="chevron.right" 
@@ -114,7 +126,7 @@ export default function ContactsScreen() {
             </Text>
 
             <View style={styles.socialButtons}>
-              <TouchableOpacity style={styles.socialButton}>
+              <TouchableOpacity style={styles.socialButton} onPress={handleFacebook}>
                 <IconSymbol 
                   ios_icon_name="logo.facebook" 
                   android_material_icon_name="facebook" 
@@ -122,18 +134,18 @@ export default function ContactsScreen() {
                   color="#FFD700" 
                 />
               </TouchableOpacity>
-              <TouchableOpacity style={styles.socialButton}>
+              <TouchableOpacity style={styles.socialButton} onPress={handleInstagram}>
                 <IconSymbol 
-                  ios_icon_name="logo.twitter" 
-                  android_material_icon_name="share" 
+                  ios_icon_name="logo.instagram" 
+                  android_material_icon_name="photo-camera" 
                   size={28} 
                   color="#FFD700" 
                 />
               </TouchableOpacity>
-              <TouchableOpacity style={styles.socialButton}>
+              <TouchableOpacity style={styles.socialButton} onPress={handleTikTok}>
                 <IconSymbol 
-                  ios_icon_name="logo.instagram" 
-                  android_material_icon_name="photo-camera" 
+                  ios_icon_name="logo.tiktok" 
+                  android_material_icon_name="music-note" 
                   size={28} 
                   color="#FFD700" 
                 />
