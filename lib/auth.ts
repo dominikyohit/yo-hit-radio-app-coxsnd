@@ -4,11 +4,7 @@ import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
 import Constants from "expo-constants";
 
-// Read backend URL from app.json configuration
-const API_URL = Constants.expoConfig?.extra?.backendUrl || "";
-
-// Log backend URL on module load for debugging
-console.log('[Auth] Backend URL configured:', API_URL);
+const API_URL = "https://3xedeh9y77sk8qu3xzuw6cfa4n5b92rj.app.specular.dev";
 
 const BEARER_TOKEN_KEY = "yohitradio_bearer_token";
 

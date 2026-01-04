@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -39,7 +39,13 @@ export default function EventDetailsScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchEvent = useCallback(async () => {
+  useEffect(() => {
+    if (id) {
+      fetchEvent();
+    }
+  }, [id]);
+
+  const fetchEvent = async () => {
     try {
       setLoading(true);
       setError(null);
@@ -53,13 +59,7 @@ export default function EventDetailsScreen() {
     } finally {
       setLoading(false);
     }
-  }, [id]);
-
-  useEffect(() => {
-    if (id) {
-      fetchEvent();
-    }
-  }, [id, fetchEvent]);
+  };
 
   const formatDate = (dateString: string) => {
     try {
