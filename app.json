@@ -5,6 +5,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/natively-dark.png",
+    "scheme": "natively",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
@@ -36,13 +37,12 @@
       "expo-router",
       "expo-web-browser"
     ],
-    "scheme": "yohitradio",
     "experiments": {
       "typedRoutes": true
     },
     "extra": {
-      "router": {},
-      "backendUrl": "https://3xedeh9y77sk8qu3xzuw6cfa4n5b92rj.app.specular.dev"
+      "router": {}
     }
-  }
+  },
+  "scheme": "Yo Hit Radio"
 }
