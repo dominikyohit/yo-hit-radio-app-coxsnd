@@ -15,8 +15,8 @@ import { colors } from '@/styles/commonStyles';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Audio } from 'expo-av';
-import audioManager from '@/utils/audioManager';
 import React, { useState, useEffect } from 'react';
+import audioManager from '@/utils/audioManager';
 import { IconSymbol } from '@/components/IconSymbol';
 
 interface WordPressSong {
@@ -45,23 +45,17 @@ interface Song {
   sortDate: Date;
 }
 
-const SONGS_API_URL = 'https://yohitradio.com/wp-json/wp/v2/songs?_embed&per_page=20';
+const SONGS_API_URL = 'https://yohitradio.com/wp-json/wp/v2/song?per_page=10&orderby=date&order=desc&_embed';
 
 export default function NewReleasesScreen() {
+  const router = useRouter();
   const [songs, setSongs] = useState<Song[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [sound, setSound] = useState<Audio.Sound | null>(null);
   const [playingSongId, setPlayingSongId] = useState<number | null>(null);
-  const router = useRouter();
 
   useEffect(() => {
     fetchSongs();
-    return () => {
-      if (sound) {
-        sound.unloadAsync();
-      }
-    };
   }, []);
 
   const fetchSongs = async () => {
@@ -69,18 +63,28 @@ export default function NewReleasesScreen() {
       const response = await fetch(SONGS_API_URL);
       const data: WordPressSong[] = await response.json();
 
-      const formattedSongs: Song[] = data
-        .map((song) => ({
+      const formattedSongs: Song[] = data.map((song) => {
+        const releaseDate = song.acf?.release_date || song.date;
+        const sortDate = song.acf?.release_date
+          ? new Date(
+              parseInt(song.acf.release_date.substring(0, 4)),
+              parseInt(song.acf.release_date.substring(4, 6)) - 1,
+              parseInt(song.acf.release_date.substring(6, 8))
+            )
+          : new Date(song.date);
+
+        return {
           id: song.id,
           title: song.title.rendered,
           artist: song.acf?.artist_name || 'Unknown Artist',
           coverImage: song._embedded?.['wp:featuredmedia']?.[0]?.source_url || null,
           audioUrl: song.acf?.audio_url || '',
-          releaseDate: song.acf?.release_date || song.date,
-          sortDate: new Date(song.acf?.release_date || song.date),
-        }))
-        .filter((song) => song.audioUrl)
-        .sort((a, b) => b.sortDate.getTime() - a.sortDate.getTime());
+          releaseDate: releaseDate,
+          sortDate: sortDate,
+        };
+      });
+
+      formattedSongs.sort((a, b) => b.sortDate.getTime() - a.sortDate.getTime());
 
       setSongs(formattedSongs);
     } catch (error) {
@@ -97,54 +101,38 @@ export default function NewReleasesScreen() {
   };
 
   const formatDate = (releaseDate: string | undefined, fallbackDate: string): string => {
-    try {
-      const date = new Date(releaseDate || fallbackDate);
+    if (releaseDate && releaseDate.length === 8) {
+      const year = releaseDate.substring(0, 4);
+      const month = releaseDate.substring(4, 6);
+      const day = releaseDate.substring(6, 8);
+      const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
       return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
-    } catch {
-      return 'Unknown Date';
     }
+    const date = new Date(fallbackDate);
+    return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
   };
 
   const handleSongPress = async (song: Song) => {
-    try {
-      if (playingSongId === song.id) {
-        await audioManager.stopCurrentAudio();
-        setSound(null);
-        setPlayingSongId(null);
-      } else {
-        await Audio.setAudioModeAsync({
-          playsInSilentModeIOS: true,
-          staysActiveInBackground: true,
-          shouldDuckAndroid: true,
-        });
+    if (!song.audioUrl) {
+      console.warn('No audio URL available for this song');
+      return;
+    }
 
-        const { sound: newSound } = await Audio.Sound.createAsync(
-          { uri: song.audioUrl },
-          { shouldPlay: false }
-        );
-
-        setSound(newSound);
-        await audioManager.playAudio(newSound, false);
-        setPlayingSongId(song.id);
-
-        newSound.setOnPlaybackStatusUpdate((status) => {
-          if (status.isLoaded && status.didJustFinish) {
-            setPlayingSongId(null);
-          }
-        });
-      }
-    } catch (error) {
-      console.error('Error playing song:', error);
+    if (playingSongId === song.id) {
+      await audioManager.stop();
+      setPlayingSongId(null);
+    } else {
+      await audioManager.playTrack(song.audioUrl);
+      setPlayingSongId(song.id);
     }
   };
 
   if (loading) {
     return (
       <LinearGradient colors={[colors.gradientStart, colors.gradientEnd]} style={styles.container}>
-        <SafeAreaView style={styles.safeArea} edges={['top']}>
+        <SafeAreaView style={styles.safeArea}>
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={colors.accent} />
-            <Text style={styles.loadingText}>Loading new releases...</Text>
           </View>
         </SafeAreaView>
       </LinearGradient>
@@ -153,17 +141,22 @@ export default function NewReleasesScreen() {
 
   return (
     <LinearGradient colors={[colors.gradientStart, colors.gradientEnd]} style={styles.container}>
-      <SafeAreaView style={styles.safeArea} edges={['top']}>
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>New Releases</Text>
-          <Text style={styles.headerSubtitle}>Fresh tracks from Yo Hit Radio</Text>
-        </View>
-
+      <SafeAreaView style={styles.safeArea}>
         <ScrollView
+          style={styles.scrollView}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.accent} />}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              tintColor={colors.accent}
+              colors={[colors.accent]}
+            />
+          }
         >
+          <Text style={styles.header}>New Releases</Text>
+
           {songs.map((song) => (
             <TouchableOpacity
               key={song.id}
@@ -171,14 +164,22 @@ export default function NewReleasesScreen() {
               onPress={() => handleSongPress(song)}
               activeOpacity={0.8}
             >
-              <Image
-                source={
-                  song.coverImage
-                    ? { uri: song.coverImage }
-                    : require('@/assets/images/placeholder-cover.png')
-                }
-                style={styles.coverImage}
-              />
+              {song.coverImage ? (
+                <Image
+                  source={{ uri: song.coverImage }}
+                  style={styles.coverImage}
+                />
+              ) : (
+                <View style={styles.placeholderCover}>
+                  <IconSymbol 
+                    ios_icon_name="music.note" 
+                    android_material_icon_name="music-note" 
+                    size={40} 
+                    color={colors.accent} 
+                  />
+                </View>
+              )}
+
               <View style={styles.songInfo}>
                 <Text style={styles.songTitle} numberOfLines={1}>
                   {song.title}
@@ -186,15 +187,22 @@ export default function NewReleasesScreen() {
                 <Text style={styles.artistName} numberOfLines={1}>
                   {song.artist}
                 </Text>
-                <Text style={styles.releaseDate}>{formatDate(song.releaseDate, song.releaseDate)}</Text>
+                <Text style={styles.releaseDate}>
+                  {formatDate(song.acf?.release_date, song.releaseDate)}
+                </Text>
               </View>
-              <View style={styles.playIconContainer}>
+
+              <TouchableOpacity
+                style={styles.playButton}
+                onPress={() => handleSongPress(song)}
+              >
                 <IconSymbol
-                  name={playingSongId === song.id ? 'pause.circle.fill' : 'play.circle.fill'}
+                  ios_icon_name={playingSongId === song.id ? 'pause.circle.fill' : 'play.circle.fill'}
+                  android_material_icon_name={playingSongId === song.id ? 'pause-circle' : 'play-circle'}
                   size={40}
                   color={colors.accent}
                 />
-              </View>
+              </TouchableOpacity>
             </TouchableOpacity>
           ))}
         </ScrollView>
@@ -204,28 +212,85 @@ export default function NewReleasesScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  safeArea: { flex: 1 },
-  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  loadingText: { color: 'rgba(255, 255, 255, 0.7)', fontSize: 16, marginTop: 16 },
-  header: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 16 },
-  headerTitle: { color: '#FFFFFF', fontSize: 32, fontWeight: '700', marginBottom: 4 },
-  headerSubtitle: { color: 'rgba(255, 255, 255, 0.7)', fontSize: 16 },
-  scrollContent: { paddingHorizontal: 20, paddingBottom: 100 },
-  songCard: {
-    flexDirection: 'row',
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    borderRadius: 16,
-    padding: 12,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
+  container: {
+    flex: 1,
+  },
+  safeArea: {
+    flex: 1,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    padding: 20,
+    paddingBottom: 100,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
     alignItems: 'center',
   },
-  coverImage: { width: 70, height: 70, borderRadius: 12 },
-  songInfo: { flex: 1, marginLeft: 12, justifyContent: 'center' },
-  songTitle: { color: '#FFFFFF', fontSize: 16, fontWeight: '600', marginBottom: 4 },
-  artistName: { color: 'rgba(255, 255, 255, 0.7)', fontSize: 14, marginBottom: 4 },
-  releaseDate: { color: colors.accent, fontSize: 12, fontWeight: '500' },
-  playIconContainer: { marginLeft: 8 },
+  header: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: colors.text,
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  songCard: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12,
+    alignItems: 'center',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 3.84,
+      },
+      android: {
+        elevation: 5,
+      },
+    }),
+  },
+  coverImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  placeholderCover: {
+    width: 80,
+    height: 80,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  songInfo: {
+    flex: 1,
+    marginLeft: 12,
+    marginRight: 8,
+  },
+  songTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 4,
+  },
+  artistName: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginBottom: 4,
+  },
+  releaseDate: {
+    fontSize: 12,
+    color: colors.textSecondary,
+  },
+  playButton: {
+    padding: 4,
+  },
 });
