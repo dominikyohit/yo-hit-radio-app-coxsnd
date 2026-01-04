@@ -28,7 +28,6 @@ import { getZenoMetadata, ZenoMetadata } from '@/utils/zenoMetadata';
 const { width } = Dimensions.get('window');
 const STREAM_URL = 'https://stream.zeno.fm/hmc38shnrwzuv';
 const METADATA_POLL_INTERVAL = 10000; // Poll every 10 seconds
-const LOGO_FALLBACK = 'https://prod-finalquest-user-projects-storage-bucket-aws.s3.amazonaws.com/user-projects/ee56f6a2-c621-44e1-862b-ddbf7d8dce99/assets/images/14c4a560-f518-4dca-a82d-8b2977bf3151.jpeg?AWSAccessKeyId=AKIAVRUVRKQJC5DISQ4Q&Signature=H%2FNEhs3zjnqZmCe9uI37GWADHBc%3D&Expires=1767494669';
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -226,7 +225,7 @@ export default function HomeScreen() {
           {/* Logo Section */}
           <View style={styles.logoSection}>
             <Image
-              source={{ uri: LOGO_FALLBACK }}
+              source={require('@/assets/images/3a57988c-abee-4da4-9ff8-f47467dfd275.png')}
               style={styles.logo}
               resizeMode="contain"
             />
@@ -317,7 +316,7 @@ export default function HomeScreen() {
               </TouchableOpacity>
             </View>
 
-            {/* Listen Live Button */}
+            {/* Listen Live Button - NOW GREEN */}
             <TouchableOpacity
               style={styles.listenLiveButton}
               onPress={togglePlayback}
@@ -330,7 +329,7 @@ export default function HomeScreen() {
                 ios_icon_name="antenna.radiowaves.left.and.right"
                 android_material_icon_name="radio"
                 size={20}
-                color={colors.background}
+                color="#FFFFFF"
               />
             </TouchableOpacity>
           </View>
@@ -517,17 +516,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.accent,
+    backgroundColor: '#22c55e',
     paddingVertical: 14,
     paddingHorizontal: 24,
     borderRadius: 25,
-    boxShadow: '0px 4px 12px rgba(251, 191, 36, 0.3)',
+    boxShadow: '0px 4px 12px rgba(34, 197, 94, 0.3)',
     elevation: 4,
   },
   listenLiveText: {
     fontSize: 16,
     fontWeight: '700',
-    color: colors.background,
+    color: '#FFFFFF',
     marginRight: 8,
   },
   shortcutsSection: {
