@@ -4,6 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { IconSymbol } from '@/components/IconSymbol';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { Audio } from 'expo-av';
 import {
   View,
   Text,
@@ -20,11 +21,15 @@ import { colors } from '@/styles/commonStyles';
 interface WordPressSong {
   id: number;
   title: { rendered: string };
-  featured_media: number;
   acf: {
-    artist: string;
+    artist_name: string;
     audio_url: string;
     release_date: string;
+  };
+  _embedded?: {
+    'wp:featuredmedia'?: Array<{
+      source_url?: string;
+    }>;
   };
 }
 
@@ -37,7 +42,7 @@ interface Song {
   releaseDate: string;
 }
 
-const SONGS_API_URL = 'https://yohitradio.com/wp-json/wp/v2/song?per_page=20&orderby=date&order=desc';
+const SONGS_API_URL = 'https://yohitradio.com/wp-json/wp/v2/song?per_page=10&orderby=date&order=desc&_embed';
 
 const styles = StyleSheet.create({
   container: {
@@ -138,6 +143,20 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginTop: 16,
   },
+  playingIndicator: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: colors.accent,
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  playingText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#1A0B2E',
+  },
 });
 
 export default function NewReleasesScreen() {
@@ -146,10 +165,29 @@ export default function NewReleasesScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sound, setSound] = useState<Audio.Sound | null>(null);
+  const [playingSongId, setPlayingSongId] = useState<number | null>(null);
 
   useEffect(() => {
     fetchSongs();
+    
+    // Cleanup audio on unmount
+    return () => {
+      if (sound) {
+        console.log('Unloading sound on unmount');
+        sound.unloadAsync();
+      }
+    };
   }, []);
+
+  useEffect(() => {
+    return sound
+      ? () => {
+          console.log('Unloading sound');
+          sound.unloadAsync();
+        }
+      : undefined;
+  }, [sound]);
 
   async function fetchSongs() {
     try {
@@ -164,38 +202,27 @@ export default function NewReleasesScreen() {
       const data: WordPressSong[] = await response.json();
       console.log(`Fetched ${data.length} songs from WordPress API`);
       
-      // Fetch cover images for each song
-      const songsWithImages = await Promise.all(
-        data.map(async (song) => {
-          let coverImage: string | null = null;
-          
-          if (song.featured_media) {
-            try {
-              const mediaResponse = await fetch(
-                `https://yohitradio.com/wp-json/wp/v2/media/${song.featured_media}`
-              );
-              if (mediaResponse.ok) {
-                const mediaData = await mediaResponse.json();
-                coverImage = mediaData.source_url || null;
-                console.log(`Fetched cover image for song ${song.id}`);
-              }
-            } catch (err) {
-              console.error(`Error fetching media for song ${song.id}:`, err);
-            }
-          }
+      // Map the WordPress data to our Song interface
+      const mappedSongs: Song[] = data.map((song) => {
+        // Extract cover image from _embedded
+        const coverImage = song._embedded?.['wp:featuredmedia']?.[0]?.source_url || null;
+        
+        // Extract artist name from acf.artist_name
+        const artist = song.acf?.artist_name || '';
+        
+        console.log(`Song: ${song.title.rendered}, Artist: ${artist}, Cover: ${coverImage ? 'Yes' : 'No'}`);
+        
+        return {
+          id: song.id,
+          title: song.title.rendered,
+          artist: artist,
+          coverImage: coverImage,
+          audioUrl: song.acf?.audio_url || '',
+          releaseDate: song.acf?.release_date || '',
+        };
+      });
 
-          return {
-            id: song.id,
-            title: song.title.rendered,
-            artist: song.acf?.artist || 'Unknown Artist',
-            coverImage,
-            audioUrl: song.acf?.audio_url || '',
-            releaseDate: song.acf?.release_date || '',
-          };
-        })
-      );
-
-      setSongs(songsWithImages);
+      setSongs(mappedSongs);
       console.log('Songs loaded successfully');
     } catch (err) {
       console.error('Error fetching songs:', err);
@@ -227,10 +254,60 @@ export default function NewReleasesScreen() {
     }
   }
 
-  function handleSongPress(song: Song) {
+  async function handleSongPress(song: Song) {
     console.log('Song pressed:', song.title);
-    // TODO: Navigate to song details or play audio
-    // router.push(`/song-details?id=${song.id}`);
+    
+    if (!song.audioUrl) {
+      console.log('No audio URL available for this song');
+      return;
+    }
+
+    try {
+      // If the same song is playing, pause it
+      if (playingSongId === song.id && sound) {
+        const status = await sound.getStatusAsync();
+        if (status.isLoaded && status.isPlaying) {
+          console.log('Pausing audio');
+          await sound.pauseAsync();
+          setPlayingSongId(null);
+          return;
+        } else if (status.isLoaded && !status.isPlaying) {
+          console.log('Resuming audio');
+          await sound.playAsync();
+          setPlayingSongId(song.id);
+          return;
+        }
+      }
+
+      // Stop and unload previous sound
+      if (sound) {
+        console.log('Stopping previous audio');
+        await sound.stopAsync();
+        await sound.unloadAsync();
+        setSound(null);
+        setPlayingSongId(null);
+      }
+
+      // Load and play new sound
+      console.log('Loading audio from:', song.audioUrl);
+      const { sound: newSound } = await Audio.Sound.createAsync(
+        { uri: song.audioUrl },
+        { shouldPlay: true },
+        (status) => {
+          if (status.isLoaded && status.didJustFinish) {
+            console.log('Audio finished playing');
+            setPlayingSongId(null);
+          }
+        }
+      );
+
+      setSound(newSound);
+      setPlayingSongId(song.id);
+      console.log('Playing audio for:', song.title);
+    } catch (err) {
+      console.error('Error playing audio:', err);
+      setPlayingSongId(null);
+    }
   }
 
   if (loading) {
@@ -317,6 +394,11 @@ export default function NewReleasesScreen() {
                     </Text>
                   )}
                 </View>
+                {playingSongId === song.id && (
+                  <View style={styles.playingIndicator}>
+                    <Text style={styles.playingText}>PLAYING</Text>
+                  </View>
+                )}
               </TouchableOpacity>
             ))
           )}
