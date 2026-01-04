@@ -162,8 +162,11 @@ export default function NewReleasesScreen() {
 
   if (loading) {
     return (
-      <LinearGradient colors={[colors.gradientStart, colors.gradientEnd]} style={styles.container}>
-        <SafeAreaView style={styles.safeArea} edges={['top']}>
+      <LinearGradient
+        colors={[colors.background, colors.card, colors.background]}
+        style={styles.gradient}
+      >
+        <SafeAreaView style={styles.container} edges={['top']}>
           <View style={styles.header}>
             <Text style={styles.headerTitle}>New Releases</Text>
           </View>
@@ -176,8 +179,11 @@ export default function NewReleasesScreen() {
   }
 
   return (
-    <LinearGradient colors={[colors.gradientStart, colors.gradientEnd]} style={styles.container}>
-      <SafeAreaView style={styles.safeArea} edges={['top']}>
+    <LinearGradient
+      colors={[colors.background, colors.card, colors.background]}
+      style={styles.gradient}
+    >
+      <SafeAreaView style={styles.container} edges={['top']}>
         <View style={styles.header}>
           <Text style={styles.headerTitle}>New Releases</Text>
         </View>
@@ -237,11 +243,12 @@ export default function NewReleasesScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
+  gradient: {
     flex: 1,
   },
-  safeArea: {
+  container: {
     flex: 1,
+    paddingTop: Platform.OS === 'android' ? 20 : 0,
   },
   header: {
     paddingHorizontal: 20,
@@ -259,6 +266,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 16,
+    paddingBottom: 120,
   },
   loadingContainer: {
     flex: 1,
