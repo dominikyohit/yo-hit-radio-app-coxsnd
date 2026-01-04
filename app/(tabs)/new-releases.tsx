@@ -1,9 +1,4 @@
 
-import React, { useState, useEffect } from 'react';
-import { LinearGradient } from 'expo-linear-gradient';
-import { IconSymbol } from '@/components/IconSymbol';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Audio } from 'expo-av';
 import { useRouter } from 'expo-router';
 import {
   View,
@@ -17,6 +12,12 @@ import {
   RefreshControl,
 } from 'react-native';
 import { colors } from '@/styles/commonStyles';
+import { LinearGradient } from 'expo-linear-gradient';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Audio } from 'expo-av';
+import audioManager from '@/utils/audioManager';
+import React, { useState, useEffect } from 'react';
+import { IconSymbol } from '@/components/IconSymbol';
 
 interface WordPressSong {
   id: number;
@@ -41,29 +42,26 @@ interface Song {
   coverImage: string | null;
   audioUrl: string;
   releaseDate: string;
-  sortDate: Date; // Used for sorting
+  sortDate: Date;
 }
 
-const SONGS_API_URL = 'https://yohitradio.com/wp-json/wp/v2/song?per_page=10&orderby=date&order=desc&_embed';
+const SONGS_API_URL = 'https://yohitradio.com/wp-json/wp/v2/songs?_embed&per_page=20';
 
 export default function NewReleasesScreen() {
-  const router = useRouter();
   const [songs, setSongs] = useState<Song[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [sound, setSound] = useState<Audio.Sound | null>(null);
-  const [playingId, setPlayingId] = useState<number | null>(null);
-
-  useEffect(() => {
-    return sound
-      ? () => {
-          sound.unloadAsync();
-        }
-      : undefined;
-  }, [sound]);
+  const [playingSongId, setPlayingSongId] = useState<number | null>(null);
+  const router = useRouter();
 
   useEffect(() => {
     fetchSongs();
+    return () => {
+      if (sound) {
+        sound.unloadAsync();
+      }
+    };
   }, []);
 
   const fetchSongs = async () => {
@@ -71,38 +69,20 @@ export default function NewReleasesScreen() {
       const response = await fetch(SONGS_API_URL);
       const data: WordPressSong[] = await response.json();
 
-      const formattedSongs: Song[] = data.map((song) => {
-        // Determine which date to use for sorting
-        let sortDate: Date;
-        
-        // Try to use release_date first
-        if (song.acf?.release_date && /^\d{8}$/.test(song.acf.release_date)) {
-          const year = song.acf.release_date.substring(0, 4);
-          const month = song.acf.release_date.substring(4, 6);
-          const day = song.acf.release_date.substring(6, 8);
-          sortDate = new Date(`${year}-${month}-${day}`);
-        } else {
-          // Fallback to post publish date
-          sortDate = new Date(song.date);
-        }
-
-        return {
+      const formattedSongs: Song[] = data
+        .map((song) => ({
           id: song.id,
           title: song.title.rendered,
           artist: song.acf?.artist_name || 'Unknown Artist',
           coverImage: song._embedded?.['wp:featuredmedia']?.[0]?.source_url || null,
           audioUrl: song.acf?.audio_url || '',
-          releaseDate: formatDate(song.acf?.release_date, song.date),
-          sortDate: sortDate,
-        };
-      });
+          releaseDate: song.acf?.release_date || song.date,
+          sortDate: new Date(song.acf?.release_date || song.date),
+        }))
+        .filter((song) => song.audioUrl)
+        .sort((a, b) => b.sortDate.getTime() - a.sortDate.getTime());
 
-      // Sort by release date from newest to oldest
-      const sortedSongs = formattedSongs.sort((a, b) => {
-        return b.sortDate.getTime() - a.sortDate.getTime();
-      });
-
-      setSongs(sortedSongs);
+      setSongs(formattedSongs);
     } catch (error) {
       console.error('Error fetching songs:', error);
     } finally {
@@ -117,84 +97,54 @@ export default function NewReleasesScreen() {
   };
 
   const formatDate = (releaseDate: string | undefined, fallbackDate: string): string => {
-    let dateToFormat = releaseDate;
-    
-    // If release_date exists and is in YYYYMMDD format
-    if (releaseDate && /^\d{8}$/.test(releaseDate)) {
-      const year = releaseDate.substring(0, 4);
-      const month = releaseDate.substring(4, 6);
-      const day = releaseDate.substring(6, 8);
-      const date = new Date(`${year}-${month}-${day}`);
-      
-      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      return `${months[date.getMonth()]} ${day}, ${year}`;
+    try {
+      const date = new Date(releaseDate || fallbackDate);
+      return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+    } catch {
+      return 'Unknown Date';
     }
-    
-    // Fallback to post.date if release_date is empty or invalid
-    if (!releaseDate || releaseDate.trim() === '') {
-      dateToFormat = fallbackDate;
-    }
-    
-    // Format ISO date string
-    if (dateToFormat) {
-      try {
-        const date = new Date(dateToFormat);
-        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-        return `${months[date.getMonth()]} ${String(date.getDate()).padStart(2, '0')}, ${date.getFullYear()}`;
-      } catch (error) {
-        console.error('Error formatting date:', error);
-        return '';
-      }
-    }
-    
-    return '';
   };
 
   const handleSongPress = async (song: Song) => {
-    if (!song.audioUrl) {
-      console.log('No audio URL available for this song');
-      return;
-    }
-
     try {
-      if (sound && playingId === song.id) {
-        // Stop currently playing song
-        await sound.stopAsync();
-        await sound.unloadAsync();
+      if (playingSongId === song.id) {
+        await audioManager.stopCurrentAudio();
         setSound(null);
-        setPlayingId(null);
+        setPlayingSongId(null);
       } else {
-        // Stop any currently playing sound
-        if (sound) {
-          await sound.stopAsync();
-          await sound.unloadAsync();
-        }
+        await Audio.setAudioModeAsync({
+          playsInSilentModeIOS: true,
+          staysActiveInBackground: true,
+          shouldDuckAndroid: true,
+        });
 
-        // Play new song
         const { sound: newSound } = await Audio.Sound.createAsync(
           { uri: song.audioUrl },
-          { shouldPlay: true }
+          { shouldPlay: false }
         );
+
         setSound(newSound);
-        setPlayingId(song.id);
+        await audioManager.playAudio(newSound, false);
+        setPlayingSongId(song.id);
+
+        newSound.setOnPlaybackStatusUpdate((status) => {
+          if (status.isLoaded && status.didJustFinish) {
+            setPlayingSongId(null);
+          }
+        });
       }
     } catch (error) {
-      console.error('Error playing audio:', error);
+      console.error('Error playing song:', error);
     }
   };
 
   if (loading) {
     return (
-      <LinearGradient
-        colors={[colors.background, colors.card, colors.background]}
-        style={styles.gradient}
-      >
-        <SafeAreaView style={styles.container} edges={['top']}>
-          <View style={styles.header}>
-            <Text style={styles.headerTitle}>New Releases</Text>
-          </View>
+      <LinearGradient colors={[colors.gradientStart, colors.gradientEnd]} style={styles.container}>
+        <SafeAreaView style={styles.safeArea} edges={['top']}>
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={colors.accent} />
+            <Text style={styles.loadingText}>Loading new releases...</Text>
           </View>
         </SafeAreaView>
       </LinearGradient>
@@ -202,18 +152,16 @@ export default function NewReleasesScreen() {
   }
 
   return (
-    <LinearGradient
-      colors={[colors.background, colors.card, colors.background]}
-      style={styles.gradient}
-    >
-      <SafeAreaView style={styles.container} edges={['top']}>
+    <LinearGradient colors={[colors.gradientStart, colors.gradientEnd]} style={styles.container}>
+      <SafeAreaView style={styles.safeArea} edges={['top']}>
         <View style={styles.header}>
           <Text style={styles.headerTitle}>New Releases</Text>
+          <Text style={styles.headerSubtitle}>Fresh tracks from Yo Hit Radio</Text>
         </View>
 
         <ScrollView
-          style={styles.scrollView}
           contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.accent} />}
         >
           {songs.map((song) => (
@@ -221,23 +169,16 @@ export default function NewReleasesScreen() {
               key={song.id}
               style={styles.songCard}
               onPress={() => handleSongPress(song)}
-              activeOpacity={0.7}
+              activeOpacity={0.8}
             >
-              {song.coverImage ? (
-                <Image
-                  source={{ uri: song.coverImage }}
-                  style={styles.coverImage}
-                />
-              ) : (
-                <View style={styles.placeholderCover}>
-                  <IconSymbol
-                    ios_icon_name="music.note"
-                    android_material_icon_name="music-note"
-                    size={30}
-                    color="rgba(255, 255, 255, 0.3)"
-                  />
-                </View>
-              )}
+              <Image
+                source={
+                  song.coverImage
+                    ? { uri: song.coverImage }
+                    : require('@/assets/images/placeholder-cover.png')
+                }
+                style={styles.coverImage}
+              />
               <View style={styles.songInfo}>
                 <Text style={styles.songTitle} numberOfLines={1}>
                   {song.title}
@@ -245,14 +186,11 @@ export default function NewReleasesScreen() {
                 <Text style={styles.artistName} numberOfLines={1}>
                   {song.artist}
                 </Text>
-                {song.releaseDate && (
-                  <Text style={styles.releaseDate}>{song.releaseDate}</Text>
-                )}
+                <Text style={styles.releaseDate}>{formatDate(song.releaseDate, song.releaseDate)}</Text>
               </View>
-              <View style={styles.playButton}>
+              <View style={styles.playIconContainer}>
                 <IconSymbol
-                  ios_icon_name={playingId === song.id ? 'pause.circle.fill' : 'play.circle.fill'}
-                  android_material_icon_name={playingId === song.id ? 'pause-circle' : 'play-circle'}
+                  name={playingSongId === song.id ? 'pause.circle.fill' : 'play.circle.fill'}
                   size={40}
                   color={colors.accent}
                 />
@@ -266,79 +204,28 @@ export default function NewReleasesScreen() {
 }
 
 const styles = StyleSheet.create({
-  gradient: {
-    flex: 1,
-  },
-  container: {
-    flex: 1,
-    paddingTop: Platform.OS === 'android' ? 20 : 0,
-  },
-  header: {
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  headerTitle: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: colors.text,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    padding: 16,
-    paddingBottom: 120,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+  container: { flex: 1 },
+  safeArea: { flex: 1 },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  loadingText: { color: 'rgba(255, 255, 255, 0.7)', fontSize: 16, marginTop: 16 },
+  header: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 16 },
+  headerTitle: { color: '#FFFFFF', fontSize: 32, fontWeight: '700', marginBottom: 4 },
+  headerSubtitle: { color: 'rgba(255, 255, 255, 0.7)', fontSize: 16 },
+  scrollContent: { paddingHorizontal: 20, paddingBottom: 100 },
   songCard: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderRadius: 16,
     padding: 12,
     marginBottom: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
     alignItems: 'center',
   },
-  coverImage: {
-    width: 60,
-    height: 60,
-    borderRadius: 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-  },
-  placeholderCover: {
-    width: 60,
-    height: 60,
-    borderRadius: 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  songInfo: {
-    flex: 1,
-    marginLeft: 12,
-    marginRight: 8,
-  },
-  songTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.text,
-    marginBottom: 4,
-  },
-  artistName: {
-    fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.7)',
-    marginBottom: 2,
-  },
-  releaseDate: {
-    fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.5)',
-  },
-  playButton: {
-    padding: 4,
-  },
+  coverImage: { width: 70, height: 70, borderRadius: 12 },
+  songInfo: { flex: 1, marginLeft: 12, justifyContent: 'center' },
+  songTitle: { color: '#FFFFFF', fontSize: 16, fontWeight: '600', marginBottom: 4 },
+  artistName: { color: 'rgba(255, 255, 255, 0.7)', fontSize: 14, marginBottom: 4 },
+  releaseDate: { color: colors.accent, fontSize: 12, fontWeight: '500' },
+  playIconContainer: { marginLeft: 8 },
 });

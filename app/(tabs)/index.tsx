@@ -1,5 +1,20 @@
 
+import { getZenoMetadata, ZenoMetadata } from '@/utils/zenoMetadata';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useRouter } from 'expo-router';
+import { colors } from '@/styles/commonStyles';
+import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Audio } from 'expo-av';
+import audioManager from '@/utils/audioManager';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withTiming,
+  Easing,
+} from 'react-native-reanimated';
+import { IconSymbol } from '@/components/IconSymbol';
 import {
   View,
   Text,
@@ -10,20 +25,6 @@ import {
   Dimensions,
   Platform,
 } from 'react-native';
-import { getZenoMetadata, ZenoMetadata } from '@/utils/zenoMetadata';
-import { colors } from '@/styles/commonStyles';
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Audio } from 'expo-av';
-import { IconSymbol } from '@/components/IconSymbol';
-import { useRouter } from 'expo-router';
-import { LinearGradient } from 'expo-linear-gradient';
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withRepeat,
-  withTiming,
-  Easing,
-} from 'react-native-reanimated';
 
 const STREAM_URL = 'https://stream.zeno.fm/hmc38shnrwzuv';
 const METADATA_POLL_INTERVAL = 10000;
@@ -31,13 +32,12 @@ const METADATA_POLL_INTERVAL = 10000;
 export default function HomeScreen() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [metadata, setMetadata] = useState<ZenoMetadata | null>(null);
-  const [loading, setLoading] = useState(false);
-  const sound = useRef<Audio.Sound | null>(null);
-  const metadataInterval = useRef<NodeJS.Timeout | null>(null);
+  const soundRef = useRef<Audio.Sound | null>(null);
+  const metadataIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const router = useRouter();
   const rotation = useSharedValue(0);
 
-  const animatedStyle = useAnimatedStyle(() => ({
+  const rotationStyle = useAnimatedStyle(() => ({
     transform: [{ rotate: `${rotation.value}deg` }],
   }));
 
@@ -64,29 +64,21 @@ export default function HomeScreen() {
 
   const startMetadataPolling = useCallback(() => {
     fetchMetadata();
-    metadataInterval.current = setInterval(fetchMetadata, METADATA_POLL_INTERVAL);
+    metadataIntervalRef.current = setInterval(fetchMetadata, METADATA_POLL_INTERVAL);
   }, [fetchMetadata]);
 
   const stopMetadataPolling = useCallback(() => {
-    if (metadataInterval.current) {
-      clearInterval(metadataInterval.current);
-      metadataInterval.current = null;
+    if (metadataIntervalRef.current) {
+      clearInterval(metadataIntervalRef.current);
+      metadataIntervalRef.current = null;
     }
   }, []);
 
   useEffect(() => {
-    fetchMetadata();
-    startMetadataPolling();
-
     return () => {
       stopMetadataPolling();
-    };
-  }, [fetchMetadata, startMetadataPolling, stopMetadataPolling]);
-
-  useEffect(() => {
-    return () => {
-      if (sound.current) {
-        sound.current.unloadAsync();
+      if (soundRef.current) {
+        soundRef.current.unloadAsync();
       }
     };
   }, []);
@@ -94,49 +86,40 @@ export default function HomeScreen() {
   const togglePlayback = async () => {
     try {
       if (isPlaying) {
-        if (sound.current) {
-          await sound.current.stopAsync();
-          await sound.current.unloadAsync();
-          sound.current = null;
-        }
+        await audioManager.stopCurrentAudio();
+        soundRef.current = null;
         setIsPlaying(false);
+        stopMetadataPolling();
       } else {
-        setLoading(true);
         await Audio.setAudioModeAsync({
           playsInSilentModeIOS: true,
           staysActiveInBackground: true,
           shouldDuckAndroid: true,
         });
 
-        const { sound: newSound } = await Audio.Sound.createAsync(
+        const { sound } = await Audio.Sound.createAsync(
           { uri: STREAM_URL },
-          { shouldPlay: true, isLooping: false },
-          null,
-          true
+          { shouldPlay: false }
         );
 
-        sound.current = newSound;
+        soundRef.current = sound;
+        await audioManager.playAudio(sound, true);
         setIsPlaying(true);
-        setLoading(false);
+        startMetadataPolling();
       }
     } catch (error) {
       console.error('Error toggling playback:', error);
-      setLoading(false);
       setIsPlaying(false);
     }
   };
 
   return (
-    <LinearGradient colors={['#1a0033', '#330066', '#1a0033']} style={styles.gradient}>
-      <SafeAreaView style={styles.container} edges={['top']}>
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-        >
-          {/* Logo Section - Image-based logo */}
+    <LinearGradient colors={[colors.gradientStart, colors.gradientEnd]} style={styles.container}>
+      <SafeAreaView style={styles.safeArea} edges={['top']}>
+        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           <View style={styles.logoContainer}>
             <Image
-              source={require('@/assets/images/821e24d8-2a3e-485e-8842-32518269360d.png')}
+              source={require('@/assets/images/yohitradio-logo.png')}
               style={styles.logo}
               resizeMode="contain"
             />
@@ -146,91 +129,91 @@ export default function HomeScreen() {
             </View>
           </View>
 
-          {/* Now Playing Card */}
           <View style={styles.nowPlayingCard}>
-            <Text style={styles.nowPlayingLabel}>NOW PLAYING</Text>
-            <Animated.View style={[styles.coverImageContainer, animatedStyle]}>
-              {metadata?.cover_image ? (
+            <View style={styles.nowPlayingHeader}>
+              <IconSymbol name="music.note" size={20} color={colors.accent} />
+              <Text style={styles.nowPlayingLabel}>Now Playing</Text>
+            </View>
+
+            <View style={styles.coverImageContainer}>
+              <Animated.View style={[styles.coverImageWrapper, rotationStyle]}>
                 <Image
-                  source={{ uri: metadata.cover_image }}
+                  source={
+                    metadata?.coverImage
+                      ? { uri: metadata.coverImage }
+                      : require('@/assets/images/placeholder-cover.png')
+                  }
                   style={styles.coverImage}
-                  resizeMode="cover"
                 />
-              ) : (
-                <View style={styles.placeholderCover}>
-                  <IconSymbol
-                    ios_icon_name="music.note"
-                    android_material_icon_name="music-note"
-                    size={64}
-                    color="#FFD700"
-                  />
-                </View>
-              )}
-            </Animated.View>
+              </Animated.View>
+            </View>
+
             <Text style={styles.songTitle} numberOfLines={2}>
               {metadata?.title || 'Yo Hit Radio'}
             </Text>
             <Text style={styles.artistName} numberOfLines={1}>
               {metadata?.artist || 'Live Stream'}
             </Text>
+
+            <TouchableOpacity style={styles.playButton} onPress={togglePlayback} activeOpacity={0.8}>
+              <LinearGradient
+                colors={[colors.accent, '#D4AF37']}
+                style={styles.playButtonGradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+              >
+                <IconSymbol name={isPlaying ? 'pause.fill' : 'play.fill'} size={40} color="#1A0A2E" />
+              </LinearGradient>
+            </TouchableOpacity>
           </View>
 
-          {/* Listen Live Button */}
-          <TouchableOpacity
-            style={[styles.listenLiveButton, loading && styles.buttonDisabled]}
-            onPress={togglePlayback}
-            disabled={loading}
-          >
-            <IconSymbol
-              ios_icon_name={isPlaying ? 'pause.circle.fill' : 'play.circle.fill'}
-              android_material_icon_name={isPlaying ? 'pause-circle' : 'play-circle'}
-              size={24}
-              color="#1a0033"
-            />
-            <Text style={styles.listenLiveText}>
-              {loading ? 'Loading...' : isPlaying ? 'Stop' : 'Listen Live'}
-            </Text>
+          <TouchableOpacity style={styles.listenLiveButton} onPress={togglePlayback} activeOpacity={0.9}>
+            <LinearGradient
+              colors={['#FFD700', '#FFA500']}
+              style={styles.listenLiveGradient}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+            >
+              <IconSymbol name="antenna.radiowaves.left.and.right" size={24} color="#1A0A2E" />
+              <Text style={styles.listenLiveText}>{isPlaying ? 'Stop Live Stream' : 'Listen Live'}</Text>
+            </LinearGradient>
           </TouchableOpacity>
 
-          {/* Quick Links */}
-          <View style={styles.quickLinksContainer}>
+          <View style={styles.shortcutsContainer}>
             <TouchableOpacity
-              style={styles.quickLinkCard}
-              onPress={() => router.push('/news')}
+              style={styles.shortcutCard}
+              onPress={() => router.push('/(tabs)/news')}
+              activeOpacity={0.8}
             >
-              <IconSymbol
-                ios_icon_name="newspaper.fill"
-                android_material_icon_name="article"
-                size={32}
-                color="#FFD700"
-              />
-              <Text style={styles.quickLinkText}>News</Text>
+              <View style={styles.shortcutIconContainer}>
+                <IconSymbol name="newspaper.fill" size={28} color={colors.accent} />
+              </View>
+              <Text style={styles.shortcutTitle}>News</Text>
+              <Text style={styles.shortcutSubtitle}>Latest updates</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={styles.quickLinkCard}
-              onPress={() => router.push('/top10')}
+              style={styles.shortcutCard}
+              onPress={() => router.push('/(tabs)/top10')}
+              activeOpacity={0.8}
             >
-              <IconSymbol
-                ios_icon_name="chart.bar.fill"
-                android_material_icon_name="bar-chart"
-                size={32}
-                color="#FFD700"
-              />
-              <Text style={styles.quickLinkText}>Top 10</Text>
+              <View style={styles.shortcutIconContainer}>
+                <IconSymbol name="chart.bar.fill" size={28} color={colors.accent} />
+              </View>
+              <Text style={styles.shortcutTitle}>Top 10</Text>
+              <Text style={styles.shortcutSubtitle}>Weekly chart</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={styles.quickLinkCard}
-              onPress={() => router.push('/events')}
+              style={styles.shortcutCard}
+              onPress={() => router.push('/(tabs)/events')}
+              activeOpacity={0.8}
             >
-              <IconSymbol
-                ios_icon_name="calendar"
-                android_material_icon_name="event"
-                size={32}
-                color="#FFD700"
-              />
-              <Text style={styles.quickLinkText}>Events</Text>
+              <View style={styles.shortcutIconContainer}>
+                <IconSymbol name="calendar" size={28} color={colors.accent} />
+              </View>
+              <Text style={styles.shortcutTitle}>Events</Text>
+              <Text style={styles.shortcutSubtitle}>Upcoming shows</Text>
             </TouchableOpacity>
           </View>
         </ScrollView>
@@ -240,137 +223,121 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  gradient: {
-    flex: 1,
-  },
-  container: {
-    flex: 1,
-  },
-  scrollContent: {
-    padding: 20,
-    paddingBottom: 100,
-  },
-  logoContainer: {
-    alignItems: 'center',
-    marginBottom: 30,
-  },
-  logo: {
-    width: 200,
-    height: 80,
-    marginBottom: 10,
-  },
-  liveIndicator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0, 255, 0, 0.2)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-  },
-  liveDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#00FF00',
-    marginRight: 6,
-  },
-  liveText: {
-    color: '#00FF00',
-    fontSize: 12,
-    fontWeight: 'bold',
-    letterSpacing: 1,
-  },
+  container: { flex: 1 },
+  safeArea: { flex: 1 },
+  scrollContent: { paddingHorizontal: 20, paddingBottom: 100 },
+  logoContainer: { alignItems: 'center', marginTop: 20, marginBottom: 30 },
+  logo: { width: 200, height: 80, marginBottom: 12 },
+  liveIndicator: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  liveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#00FF00' },
+  liveText: { color: '#00FF00', fontSize: 14, fontWeight: '700', letterSpacing: 1 },
   nowPlayingCard: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
     borderRadius: 20,
     padding: 20,
-    alignItems: 'center',
     marginBottom: 20,
     borderWidth: 1,
-    borderColor: 'rgba(255, 215, 0, 0.3)',
+    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
-  nowPlayingLabel: {
-    color: '#FFD700',
-    fontSize: 12,
-    fontWeight: 'bold',
-    letterSpacing: 2,
-    marginBottom: 15,
-  },
-  coverImageContainer: {
-    width: 180,
-    height: 180,
-    borderRadius: 90,
-    overflow: 'hidden',
-    marginBottom: 15,
-    borderWidth: 3,
-    borderColor: '#FFD700',
-  },
-  coverImage: {
-    width: '100%',
-    height: '100%',
-  },
-  placeholderCover: {
-    width: '100%',
-    height: '100%',
-    backgroundColor: 'rgba(255, 215, 0, 0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+  nowPlayingHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 20 },
+  nowPlayingLabel: { color: colors.accent, fontSize: 14, fontWeight: '600', letterSpacing: 0.5 },
+  coverImageContainer: { alignItems: 'center', marginBottom: 20 },
+  coverImageWrapper: { width: 180, height: 180, borderRadius: 90, overflow: 'hidden' },
+  coverImage: { width: '100%', height: '100%' },
   songTitle: {
     color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontSize: 20,
+    fontWeight: '700',
     textAlign: 'center',
-    marginBottom: 5,
+    marginBottom: 8,
   },
   artistName: {
-    color: '#CCCCCC',
-    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.7)',
+    fontSize: 16,
     textAlign: 'center',
+    marginBottom: 20,
+  },
+  playButton: {
+    alignSelf: 'center',
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    overflow: 'hidden',
+    ...Platform.select({
+      ios: {
+        shadowColor: colors.accent,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+      },
+      android: { elevation: 8 },
+    }),
+  },
+  playButtonGradient: {
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   listenLiveButton: {
-    backgroundColor: '#FFD700',
+    borderRadius: 16,
+    overflow: 'hidden',
+    marginBottom: 30,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#FFD700',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+      },
+      android: { elevation: 6 },
+    }),
+  },
+  listenLiveGradient: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 32,
-    borderRadius: 30,
-    marginBottom: 30,
-    shadowColor: '#FFD700',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  buttonDisabled: {
-    opacity: 0.6,
+    paddingVertical: 18,
+    gap: 12,
   },
   listenLiveText: {
-    color: '#1a0033',
+    color: '#1A0A2E',
     fontSize: 18,
-    fontWeight: 'bold',
-    marginLeft: 10,
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
-  quickLinksContainer: {
+  shortcutsContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     gap: 12,
   },
-  quickLinkCard: {
+  shortcutCard: {
     flex: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 15,
-    padding: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderRadius: 16,
+    padding: 16,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255, 215, 0, 0.2)',
+    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
-  quickLinkText: {
+  shortcutIconContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(255, 215, 0, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  shortcutTitle: {
     color: '#FFFFFF',
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '600',
-    marginTop: 8,
+    marginBottom: 4,
+  },
+  shortcutSubtitle: {
+    color: 'rgba(255, 255, 255, 0.6)',
+    fontSize: 11,
     textAlign: 'center',
   },
 });
