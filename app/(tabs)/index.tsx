@@ -133,16 +133,13 @@ export default function HomeScreen() {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          {/* Logo Section - Text-based logo with gradient */}
+          {/* Logo Section */}
           <View style={styles.logoContainer}>
-            <LinearGradient
-              colors={['#FFD700', '#FFA500']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.logoGradient}
-            >
-              <Text style={styles.logoText}>YO HIT RADIO</Text>
-            </LinearGradient>
+            <Image
+              source={require('@/assets/images/yohitradio-logo.png')}
+              style={styles.logo}
+              resizeMode="contain"
+            />
             <View style={styles.liveIndicator}>
               <View style={styles.liveDot} />
               <Text style={styles.liveText}>LIVE</Text>
@@ -153,22 +150,15 @@ export default function HomeScreen() {
           <View style={styles.nowPlayingCard}>
             <Text style={styles.nowPlayingLabel}>NOW PLAYING</Text>
             <Animated.View style={[styles.coverImageContainer, animatedStyle]}>
-              {metadata?.cover_image ? (
-                <Image
-                  source={{ uri: metadata.cover_image }}
-                  style={styles.coverImage}
-                  resizeMode="cover"
-                />
-              ) : (
-                <View style={styles.placeholderCover}>
-                  <IconSymbol
-                    ios_icon_name="music.note"
-                    android_material_icon_name="music-note"
-                    size={64}
-                    color="#FFD700"
-                  />
-                </View>
-              )}
+              <Image
+                source={
+                  metadata?.cover_image
+                    ? { uri: metadata.cover_image }
+                    : require('@/assets/images/yohitradio-logo.png')
+                }
+                style={styles.coverImage}
+                resizeMode="cover"
+              />
             </Animated.View>
             <Text style={styles.songTitle} numberOfLines={2}>
               {metadata?.title || 'Yo Hit Radio'}
@@ -185,8 +175,7 @@ export default function HomeScreen() {
             disabled={loading}
           >
             <IconSymbol
-              ios_icon_name={isPlaying ? 'pause.circle.fill' : 'play.circle.fill'}
-              android_material_icon_name={isPlaying ? 'pause-circle' : 'play-circle'}
+              name={isPlaying ? 'pause.circle.fill' : 'play.circle.fill'}
               size={24}
               color="#1a0033"
             />
@@ -201,12 +190,7 @@ export default function HomeScreen() {
               style={styles.quickLinkCard}
               onPress={() => router.push('/news')}
             >
-              <IconSymbol
-                ios_icon_name="newspaper.fill"
-                android_material_icon_name="article"
-                size={32}
-                color="#FFD700"
-              />
+              <IconSymbol name="newspaper.fill" size={32} color="#FFD700" />
               <Text style={styles.quickLinkText}>News</Text>
             </TouchableOpacity>
 
@@ -214,12 +198,7 @@ export default function HomeScreen() {
               style={styles.quickLinkCard}
               onPress={() => router.push('/top10')}
             >
-              <IconSymbol
-                ios_icon_name="chart.bar.fill"
-                android_material_icon_name="bar-chart"
-                size={32}
-                color="#FFD700"
-              />
+              <IconSymbol name="chart.bar.fill" size={32} color="#FFD700" />
               <Text style={styles.quickLinkText}>Top 10</Text>
             </TouchableOpacity>
 
@@ -227,12 +206,7 @@ export default function HomeScreen() {
               style={styles.quickLinkCard}
               onPress={() => router.push('/events')}
             >
-              <IconSymbol
-                ios_icon_name="calendar"
-                android_material_icon_name="event"
-                size={32}
-                color="#FFD700"
-              />
+              <IconSymbol name="calendar" size={32} color="#FFD700" />
               <Text style={styles.quickLinkText}>Events</Text>
             </TouchableOpacity>
           </View>
@@ -257,17 +231,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 30,
   },
-  logoGradient: {
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 12,
+  logo: {
+    width: 200,
+    height: 80,
     marginBottom: 10,
-  },
-  logoText: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#1a0033',
-    letterSpacing: 2,
   },
   liveIndicator: {
     flexDirection: 'row',
@@ -318,13 +285,6 @@ const styles = StyleSheet.create({
   coverImage: {
     width: '100%',
     height: '100%',
-  },
-  placeholderCover: {
-    width: '100%',
-    height: '100%',
-    backgroundColor: 'rgba(255, 215, 0, 0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   songTitle: {
     color: '#FFFFFF',
