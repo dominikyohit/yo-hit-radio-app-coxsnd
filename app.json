@@ -1,3 +1,4 @@
+
 {
   "expo": {
     "name": "Yo Hit Radio",
@@ -43,6 +44,5 @@
     "extra": {
       "router": {}
     }
-  },
-  "scheme": "Yo Hit Radio"
+  }
 }

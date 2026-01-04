@@ -118,11 +118,9 @@ export default function HomeScreen() {
       <SafeAreaView style={styles.safeArea} edges={['top']}>
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           <View style={styles.logoContainer}>
-            <Image
-              source={require('@/assets/images/yohitradio-logo.png')}
-              style={styles.logo}
-              resizeMode="contain"
-            />
+            <View style={styles.textLogoContainer}>
+              <Text style={styles.textLogo}>YO HIT RADIO</Text>
+            </View>
             <View style={styles.liveIndicator}>
               <View style={styles.liveDot} />
               <Text style={styles.liveText}>LIVE</Text>
@@ -131,20 +129,22 @@ export default function HomeScreen() {
 
           <View style={styles.nowPlayingCard}>
             <View style={styles.nowPlayingHeader}>
-              <IconSymbol name="music.note" size={20} color={colors.accent} />
+              <IconSymbol ios_icon_name="music.note" android_material_icon_name="music-note" size={20} color={colors.accent} />
               <Text style={styles.nowPlayingLabel}>Now Playing</Text>
             </View>
 
             <View style={styles.coverImageContainer}>
               <Animated.View style={[styles.coverImageWrapper, rotationStyle]}>
-                <Image
-                  source={
-                    metadata?.coverImage
-                      ? { uri: metadata.coverImage }
-                      : require('@/assets/images/placeholder-cover.png')
-                  }
-                  style={styles.coverImage}
-                />
+                {metadata?.coverImage ? (
+                  <Image
+                    source={{ uri: metadata.coverImage }}
+                    style={styles.coverImage}
+                  />
+                ) : (
+                  <View style={styles.placeholderCover}>
+                    <IconSymbol ios_icon_name="music.note" android_material_icon_name="music-note" size={60} color={colors.accent} />
+                  </View>
+                )}
               </Animated.View>
             </View>
 
@@ -162,7 +162,12 @@ export default function HomeScreen() {
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
               >
-                <IconSymbol name={isPlaying ? 'pause.fill' : 'play.fill'} size={40} color="#1A0A2E" />
+                <IconSymbol 
+                  ios_icon_name={isPlaying ? 'pause.fill' : 'play.fill'} 
+                  android_material_icon_name={isPlaying ? 'pause' : 'play-arrow'} 
+                  size={40} 
+                  color="#1A0A2E" 
+                />
               </LinearGradient>
             </TouchableOpacity>
           </View>
@@ -174,7 +179,7 @@ export default function HomeScreen() {
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
             >
-              <IconSymbol name="antenna.radiowaves.left.and.right" size={24} color="#1A0A2E" />
+              <IconSymbol ios_icon_name="antenna.radiowaves.left.and.right" android_material_icon_name="radio" size={24} color="#1A0A2E" />
               <Text style={styles.listenLiveText}>{isPlaying ? 'Stop Live Stream' : 'Listen Live'}</Text>
             </LinearGradient>
           </TouchableOpacity>
@@ -186,7 +191,7 @@ export default function HomeScreen() {
               activeOpacity={0.8}
             >
               <View style={styles.shortcutIconContainer}>
-                <IconSymbol name="newspaper.fill" size={28} color={colors.accent} />
+                <IconSymbol ios_icon_name="newspaper.fill" android_material_icon_name="article" size={28} color={colors.accent} />
               </View>
               <Text style={styles.shortcutTitle}>News</Text>
               <Text style={styles.shortcutSubtitle}>Latest updates</Text>
@@ -198,7 +203,7 @@ export default function HomeScreen() {
               activeOpacity={0.8}
             >
               <View style={styles.shortcutIconContainer}>
-                <IconSymbol name="chart.bar.fill" size={28} color={colors.accent} />
+                <IconSymbol ios_icon_name="chart.bar.fill" android_material_icon_name="bar-chart" size={28} color={colors.accent} />
               </View>
               <Text style={styles.shortcutTitle}>Top 10</Text>
               <Text style={styles.shortcutSubtitle}>Weekly chart</Text>
@@ -210,7 +215,7 @@ export default function HomeScreen() {
               activeOpacity={0.8}
             >
               <View style={styles.shortcutIconContainer}>
-                <IconSymbol name="calendar" size={28} color={colors.accent} />
+                <IconSymbol ios_icon_name="calendar" android_material_icon_name="event" size={28} color={colors.accent} />
               </View>
               <Text style={styles.shortcutTitle}>Events</Text>
               <Text style={styles.shortcutSubtitle}>Upcoming shows</Text>
@@ -227,7 +232,22 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1 },
   scrollContent: { paddingHorizontal: 20, paddingBottom: 100 },
   logoContainer: { alignItems: 'center', marginTop: 20, marginBottom: 30 },
-  logo: { width: 200, height: 80, marginBottom: 12 },
+  textLogoContainer: {
+    backgroundColor: 'rgba(255, 215, 0, 0.15)',
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    borderRadius: 16,
+    marginBottom: 12,
+    borderWidth: 2,
+    borderColor: colors.accent,
+  },
+  textLogo: {
+    color: colors.accent,
+    fontSize: 28,
+    fontWeight: '900',
+    letterSpacing: 2,
+    textAlign: 'center',
+  },
   liveIndicator: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   liveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#00FF00' },
   liveText: { color: '#00FF00', fontSize: 14, fontWeight: '700', letterSpacing: 1 },
@@ -244,6 +264,13 @@ const styles = StyleSheet.create({
   coverImageContainer: { alignItems: 'center', marginBottom: 20 },
   coverImageWrapper: { width: 180, height: 180, borderRadius: 90, overflow: 'hidden' },
   coverImage: { width: '100%', height: '100%' },
+  placeholderCover: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: 'rgba(255, 215, 0, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   songTitle: {
     color: '#FFFFFF',
     fontSize: 20,
