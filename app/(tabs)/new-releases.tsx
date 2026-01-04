@@ -194,14 +194,21 @@ export default function NewReleasesScreen() {
               onPress={() => handleSongPress(song)}
               activeOpacity={0.7}
             >
-              <Image
-                source={
-                  song.coverImage
-                    ? { uri: song.coverImage }
-                    : require('@/assets/images/placeholder-cover.png')
-                }
-                style={styles.coverImage}
-              />
+              {song.coverImage ? (
+                <Image
+                  source={{ uri: song.coverImage }}
+                  style={styles.coverImage}
+                />
+              ) : (
+                <View style={styles.placeholderCover}>
+                  <IconSymbol
+                    ios_icon_name="music.note"
+                    android_material_icon_name="music-note"
+                    size={30}
+                    color="rgba(255, 255, 255, 0.3)"
+                  />
+                </View>
+              )}
               <View style={styles.songInfo}>
                 <Text style={styles.songTitle} numberOfLines={1}>
                   {song.title}
@@ -271,6 +278,14 @@ const styles = StyleSheet.create({
     height: 60,
     borderRadius: 8,
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  placeholderCover: {
+    width: 60,
+    height: 60,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   songInfo: {
     flex: 1,
