@@ -1,20 +1,5 @@
 
-import { getZenoMetadata, ZenoMetadata } from '@/utils/zenoMetadata';
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useRouter } from 'expo-router';
-import { colors } from '@/styles/commonStyles';
-import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Audio } from 'expo-av';
-import audioManager from '@/utils/audioManager';
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withRepeat,
-  withTiming,
-  Easing,
-} from 'react-native-reanimated';
-import { IconSymbol } from '@/components/IconSymbol';
 import {
   View,
   Text,
@@ -25,6 +10,20 @@ import {
   Dimensions,
   Platform,
 } from 'react-native';
+import { getZenoMetadata, ZenoMetadata } from '@/utils/zenoMetadata';
+import { colors } from '@/styles/commonStyles';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { Audio } from 'expo-av';
+import { IconSymbol } from '@/components/IconSymbol';
+import { useRouter } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withTiming,
+  Easing,
+} from 'react-native-reanimated';
 
 const STREAM_URL = 'https://stream.zeno.fm/hmc38shnrwzuv';
 const METADATA_POLL_INTERVAL = 10000;
@@ -32,12 +31,13 @@ const METADATA_POLL_INTERVAL = 10000;
 export default function HomeScreen() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [metadata, setMetadata] = useState<ZenoMetadata | null>(null);
-  const soundRef = useRef<Audio.Sound | null>(null);
-  const metadataIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const [loading, setLoading] = useState(false);
+  const sound = useRef<Audio.Sound | null>(null);
+  const metadataInterval = useRef<NodeJS.Timeout | null>(null);
   const router = useRouter();
   const rotation = useSharedValue(0);
 
-  const rotationStyle = useAnimatedStyle(() => ({
+  const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ rotate: `${rotation.value}deg` }],
   }));
 
@@ -64,21 +64,29 @@ export default function HomeScreen() {
 
   const startMetadataPolling = useCallback(() => {
     fetchMetadata();
-    metadataIntervalRef.current = setInterval(fetchMetadata, METADATA_POLL_INTERVAL);
+    metadataInterval.current = setInterval(fetchMetadata, METADATA_POLL_INTERVAL);
   }, [fetchMetadata]);
 
   const stopMetadataPolling = useCallback(() => {
-    if (metadataIntervalRef.current) {
-      clearInterval(metadataIntervalRef.current);
-      metadataIntervalRef.current = null;
+    if (metadataInterval.current) {
+      clearInterval(metadataInterval.current);
+      metadataInterval.current = null;
     }
   }, []);
 
   useEffect(() => {
+    fetchMetadata();
+    startMetadataPolling();
+
     return () => {
       stopMetadataPolling();
-      if (soundRef.current) {
-        soundRef.current.unloadAsync();
+    };
+  }, [fetchMetadata, startMetadataPolling, stopMetadataPolling]);
+
+  useEffect(() => {
+    return () => {
+      if (sound.current) {
+        sound.current.unloadAsync();
       }
     };
   }, []);
@@ -86,139 +94,143 @@ export default function HomeScreen() {
   const togglePlayback = async () => {
     try {
       if (isPlaying) {
-        await audioManager.stopCurrentAudio();
-        soundRef.current = null;
+        if (sound.current) {
+          await sound.current.stopAsync();
+          await sound.current.unloadAsync();
+          sound.current = null;
+        }
         setIsPlaying(false);
-        stopMetadataPolling();
       } else {
+        setLoading(true);
         await Audio.setAudioModeAsync({
           playsInSilentModeIOS: true,
           staysActiveInBackground: true,
           shouldDuckAndroid: true,
         });
 
-        const { sound } = await Audio.Sound.createAsync(
+        const { sound: newSound } = await Audio.Sound.createAsync(
           { uri: STREAM_URL },
-          { shouldPlay: false }
+          { shouldPlay: true, isLooping: false },
+          null,
+          true
         );
 
-        soundRef.current = sound;
-        await audioManager.playAudio(sound, true);
+        sound.current = newSound;
         setIsPlaying(true);
-        startMetadataPolling();
+        setLoading(false);
       }
     } catch (error) {
       console.error('Error toggling playback:', error);
+      setLoading(false);
       setIsPlaying(false);
     }
   };
 
   return (
-    <LinearGradient colors={[colors.gradientStart, colors.gradientEnd]} style={styles.container}>
-      <SafeAreaView style={styles.safeArea} edges={['top']}>
-        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+    <LinearGradient colors={['#1a0033', '#330066', '#1a0033']} style={styles.gradient}>
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Logo Section - Image-based logo */}
           <View style={styles.logoContainer}>
-            <View style={styles.textLogoContainer}>
-              <Text style={styles.textLogo}>YO HIT RADIO</Text>
-            </View>
+            <Image
+              source={require('@/assets/images/821e24d8-2a3e-485e-8842-32518269360d.png')}
+              style={styles.logo}
+              resizeMode="contain"
+            />
             <View style={styles.liveIndicator}>
               <View style={styles.liveDot} />
               <Text style={styles.liveText}>LIVE</Text>
             </View>
           </View>
 
+          {/* Now Playing Card */}
           <View style={styles.nowPlayingCard}>
-            <View style={styles.nowPlayingHeader}>
-              <IconSymbol ios_icon_name="music.note" android_material_icon_name="music-note" size={20} color={colors.accent} />
-              <Text style={styles.nowPlayingLabel}>Now Playing</Text>
-            </View>
-
-            <View style={styles.coverImageContainer}>
-              <Animated.View style={[styles.coverImageWrapper, rotationStyle]}>
-                {metadata?.coverImage ? (
-                  <Image
-                    source={{ uri: metadata.coverImage }}
-                    style={styles.coverImage}
+            <Text style={styles.nowPlayingLabel}>NOW PLAYING</Text>
+            <Animated.View style={[styles.coverImageContainer, animatedStyle]}>
+              {metadata?.cover_image ? (
+                <Image
+                  source={{ uri: metadata.cover_image }}
+                  style={styles.coverImage}
+                  resizeMode="cover"
+                />
+              ) : (
+                <View style={styles.placeholderCover}>
+                  <IconSymbol
+                    ios_icon_name="music.note"
+                    android_material_icon_name="music-note"
+                    size={64}
+                    color="#FFD700"
                   />
-                ) : (
-                  <View style={styles.placeholderCover}>
-                    <IconSymbol ios_icon_name="music.note" android_material_icon_name="music-note" size={60} color={colors.accent} />
-                  </View>
-                )}
-              </Animated.View>
-            </View>
-
+                </View>
+              )}
+            </Animated.View>
             <Text style={styles.songTitle} numberOfLines={2}>
               {metadata?.title || 'Yo Hit Radio'}
             </Text>
             <Text style={styles.artistName} numberOfLines={1}>
               {metadata?.artist || 'Live Stream'}
             </Text>
-
-            <TouchableOpacity style={styles.playButton} onPress={togglePlayback} activeOpacity={0.8}>
-              <LinearGradient
-                colors={[colors.accent, '#D4AF37']}
-                style={styles.playButtonGradient}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-              >
-                <IconSymbol 
-                  ios_icon_name={isPlaying ? 'pause.fill' : 'play.fill'} 
-                  android_material_icon_name={isPlaying ? 'pause' : 'play-arrow'} 
-                  size={40} 
-                  color="#1A0A2E" 
-                />
-              </LinearGradient>
-            </TouchableOpacity>
           </View>
 
-          <TouchableOpacity style={styles.listenLiveButton} onPress={togglePlayback} activeOpacity={0.9}>
-            <LinearGradient
-              colors={['#FFD700', '#FFA500']}
-              style={styles.listenLiveGradient}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-            >
-              <IconSymbol ios_icon_name="antenna.radiowaves.left.and.right" android_material_icon_name="radio" size={24} color="#1A0A2E" />
-              <Text style={styles.listenLiveText}>{isPlaying ? 'Stop Live Stream' : 'Listen Live'}</Text>
-            </LinearGradient>
+          {/* Listen Live Button */}
+          <TouchableOpacity
+            style={[styles.listenLiveButton, loading && styles.buttonDisabled]}
+            onPress={togglePlayback}
+            disabled={loading}
+          >
+            <IconSymbol
+              ios_icon_name={isPlaying ? 'pause.circle.fill' : 'play.circle.fill'}
+              android_material_icon_name={isPlaying ? 'pause-circle' : 'play-circle'}
+              size={24}
+              color="#1a0033"
+            />
+            <Text style={styles.listenLiveText}>
+              {loading ? 'Loading...' : isPlaying ? 'Stop' : 'Listen Live'}
+            </Text>
           </TouchableOpacity>
 
-          <View style={styles.shortcutsContainer}>
+          {/* Quick Links */}
+          <View style={styles.quickLinksContainer}>
             <TouchableOpacity
-              style={styles.shortcutCard}
-              onPress={() => router.push('/(tabs)/news')}
-              activeOpacity={0.8}
+              style={styles.quickLinkCard}
+              onPress={() => router.push('/news')}
             >
-              <View style={styles.shortcutIconContainer}>
-                <IconSymbol ios_icon_name="newspaper.fill" android_material_icon_name="article" size={28} color={colors.accent} />
-              </View>
-              <Text style={styles.shortcutTitle}>News</Text>
-              <Text style={styles.shortcutSubtitle}>Latest updates</Text>
+              <IconSymbol
+                ios_icon_name="newspaper.fill"
+                android_material_icon_name="article"
+                size={32}
+                color="#FFD700"
+              />
+              <Text style={styles.quickLinkText}>News</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={styles.shortcutCard}
-              onPress={() => router.push('/(tabs)/top10')}
-              activeOpacity={0.8}
+              style={styles.quickLinkCard}
+              onPress={() => router.push('/top10')}
             >
-              <View style={styles.shortcutIconContainer}>
-                <IconSymbol ios_icon_name="chart.bar.fill" android_material_icon_name="bar-chart" size={28} color={colors.accent} />
-              </View>
-              <Text style={styles.shortcutTitle}>Top 10</Text>
-              <Text style={styles.shortcutSubtitle}>Weekly chart</Text>
+              <IconSymbol
+                ios_icon_name="chart.bar.fill"
+                android_material_icon_name="bar-chart"
+                size={32}
+                color="#FFD700"
+              />
+              <Text style={styles.quickLinkText}>Top 10</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={styles.shortcutCard}
-              onPress={() => router.push('/(tabs)/events')}
-              activeOpacity={0.8}
+              style={styles.quickLinkCard}
+              onPress={() => router.push('/events')}
             >
-              <View style={styles.shortcutIconContainer}>
-                <IconSymbol ios_icon_name="calendar" android_material_icon_name="event" size={28} color={colors.accent} />
-              </View>
-              <Text style={styles.shortcutTitle}>Events</Text>
-              <Text style={styles.shortcutSubtitle}>Upcoming shows</Text>
+              <IconSymbol
+                ios_icon_name="calendar"
+                android_material_icon_name="event"
+                size={32}
+                color="#FFD700"
+              />
+              <Text style={styles.quickLinkText}>Events</Text>
             </TouchableOpacity>
           </View>
         </ScrollView>
@@ -228,143 +240,137 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  safeArea: { flex: 1 },
-  scrollContent: { paddingHorizontal: 20, paddingBottom: 100 },
-  logoContainer: { alignItems: 'center', marginTop: 20, marginBottom: 30 },
-  textLogoContainer: {
-    backgroundColor: 'rgba(255, 215, 0, 0.15)',
-    paddingHorizontal: 24,
-    paddingVertical: 16,
-    borderRadius: 16,
-    marginBottom: 12,
-    borderWidth: 2,
-    borderColor: colors.accent,
+  gradient: {
+    flex: 1,
   },
-  textLogo: {
-    color: colors.accent,
-    fontSize: 28,
-    fontWeight: '900',
-    letterSpacing: 2,
-    textAlign: 'center',
+  container: {
+    flex: 1,
   },
-  liveIndicator: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  liveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#00FF00' },
-  liveText: { color: '#00FF00', fontSize: 14, fontWeight: '700', letterSpacing: 1 },
+  scrollContent: {
+    padding: 20,
+    paddingBottom: 100,
+  },
+  logoContainer: {
+    alignItems: 'center',
+    marginBottom: 30,
+  },
+  logo: {
+    width: 200,
+    height: 80,
+    marginBottom: 10,
+  },
+  liveIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 255, 0, 0.2)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  liveDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#00FF00',
+    marginRight: 6,
+  },
+  liveText: {
+    color: '#00FF00',
+    fontSize: 12,
+    fontWeight: 'bold',
+    letterSpacing: 1,
+  },
   nowPlayingCard: {
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
     borderRadius: 20,
     padding: 20,
+    alignItems: 'center',
     marginBottom: 20,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderColor: 'rgba(255, 215, 0, 0.3)',
   },
-  nowPlayingHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 20 },
-  nowPlayingLabel: { color: colors.accent, fontSize: 14, fontWeight: '600', letterSpacing: 0.5 },
-  coverImageContainer: { alignItems: 'center', marginBottom: 20 },
-  coverImageWrapper: { width: 180, height: 180, borderRadius: 90, overflow: 'hidden' },
-  coverImage: { width: '100%', height: '100%' },
+  nowPlayingLabel: {
+    color: '#FFD700',
+    fontSize: 12,
+    fontWeight: 'bold',
+    letterSpacing: 2,
+    marginBottom: 15,
+  },
+  coverImageContainer: {
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    overflow: 'hidden',
+    marginBottom: 15,
+    borderWidth: 3,
+    borderColor: '#FFD700',
+  },
+  coverImage: {
+    width: '100%',
+    height: '100%',
+  },
   placeholderCover: {
     width: '100%',
     height: '100%',
-    backgroundColor: 'rgba(255, 215, 0, 0.15)',
-    alignItems: 'center',
+    backgroundColor: 'rgba(255, 215, 0, 0.2)',
     justifyContent: 'center',
+    alignItems: 'center',
   },
   songTitle: {
     color: '#FFFFFF',
-    fontSize: 20,
-    fontWeight: '700',
+    fontSize: 18,
+    fontWeight: 'bold',
     textAlign: 'center',
-    marginBottom: 8,
+    marginBottom: 5,
   },
   artistName: {
-    color: 'rgba(255, 255, 255, 0.7)',
-    fontSize: 16,
+    color: '#CCCCCC',
+    fontSize: 14,
     textAlign: 'center',
-    marginBottom: 20,
-  },
-  playButton: {
-    alignSelf: 'center',
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    overflow: 'hidden',
-    ...Platform.select({
-      ios: {
-        shadowColor: colors.accent,
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
-      },
-      android: { elevation: 8 },
-    }),
-  },
-  playButtonGradient: {
-    width: '100%',
-    height: '100%',
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   listenLiveButton: {
-    borderRadius: 16,
-    overflow: 'hidden',
-    marginBottom: 30,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#FFD700',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
-      },
-      android: { elevation: 6 },
-    }),
-  },
-  listenLiveGradient: {
+    backgroundColor: '#FFD700',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 18,
-    gap: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    borderRadius: 30,
+    marginBottom: 30,
+    shadowColor: '#FFD700',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  buttonDisabled: {
+    opacity: 0.6,
   },
   listenLiveText: {
-    color: '#1A0A2E',
+    color: '#1a0033',
     fontSize: 18,
-    fontWeight: '700',
-    letterSpacing: 0.5,
+    fontWeight: 'bold',
+    marginLeft: 10,
   },
-  shortcutsContainer: {
+  quickLinksContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     gap: 12,
   },
-  shortcutCard: {
+  quickLinkCard: {
     flex: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    borderRadius: 16,
-    padding: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 15,
+    padding: 20,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderColor: 'rgba(255, 215, 0, 0.2)',
   },
-  shortcutIconContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: 'rgba(255, 215, 0, 0.15)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 12,
-  },
-  shortcutTitle: {
+  quickLinkText: {
     color: '#FFFFFF',
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '600',
-    marginBottom: 4,
-  },
-  shortcutSubtitle: {
-    color: 'rgba(255, 255, 255, 0.6)',
-    fontSize: 11,
+    marginTop: 8,
     textAlign: 'center',
   },
 });
