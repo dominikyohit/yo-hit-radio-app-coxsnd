@@ -133,16 +133,13 @@ export default function HomeScreen() {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          {/* Logo Section - Text-based logo with gradient */}
+          {/* Logo Section - Image-based logo */}
           <View style={styles.logoContainer}>
-            <LinearGradient
-              colors={['#FFD700', '#FFA500']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.logoGradient}
-            >
-              <Text style={styles.logoText}>YO HIT RADIO</Text>
-            </LinearGradient>
+            <Image
+              source={require('@/assets/images/821e24d8-2a3e-485e-8842-32518269360d.png')}
+              style={styles.logo}
+              resizeMode="contain"
+            />
             <View style={styles.liveIndicator}>
               <View style={styles.liveDot} />
               <Text style={styles.liveText}>LIVE</Text>
@@ -257,17 +254,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 30,
   },
-  logoGradient: {
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 12,
+  logo: {
+    width: 200,
+    height: 80,
     marginBottom: 10,
-  },
-  logoText: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#1a0033',
-    letterSpacing: 2,
   },
   liveIndicator: {
     flexDirection: 'row',
