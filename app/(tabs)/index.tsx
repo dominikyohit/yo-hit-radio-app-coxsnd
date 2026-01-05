@@ -28,11 +28,145 @@ import { fetchLiveMetadata, LiveMetadata } from '@/utils/metadataService';
 const STREAM_URL = 'https://stream.zeno.fm/hmc38shnrwzuv';
 const METADATA_POLL_INTERVAL = 12000; // 12 seconds
 
+interface Show {
+  name: string;
+  startTime: string;
+  endTime: string;
+}
+
+interface Schedule {
+  [day: string]: Show[];
+}
+
+// Schedule data matching the Shows tab
+const SCHEDULE: Schedule = {
+  Monday: [
+    { name: 'Hit by Night', startTime: '00:00', endTime: '04:00' },
+    { name: 'Gospel Hits', startTime: '04:00', endTime: '06:00' },
+    { name: 'Morning Jam', startTime: '06:00', endTime: '09:00' },
+    { name: 'The Playlist Hits', startTime: '09:00', endTime: '14:00' },
+    { name: 'NextGen Vibes', startTime: '14:00', endTime: '16:00' },
+    { name: 'Hit Sou Hit', startTime: '16:00', endTime: '20:00' },
+    { name: 'Dominik Show', startTime: '20:00', endTime: '22:00' },
+    { name: 'Hit Sou Hit', startTime: '22:00', endTime: '24:00' },
+  ],
+  Tuesday: [
+    { name: 'Hit by Night', startTime: '00:00', endTime: '04:00' },
+    { name: 'Gospel Hits', startTime: '04:00', endTime: '06:00' },
+    { name: 'Morning Jam', startTime: '06:00', endTime: '09:00' },
+    { name: 'The Playlist Hits', startTime: '09:00', endTime: '14:00' },
+    { name: 'NextGen Vibes', startTime: '14:00', endTime: '16:00' },
+    { name: 'Hit Sou Hit', startTime: '16:00', endTime: '20:00' },
+    { name: 'Dominik Show', startTime: '20:00', endTime: '22:00' },
+    { name: 'Hit Sou Hit', startTime: '22:00', endTime: '24:00' },
+  ],
+  Wednesday: [
+    { name: 'Hit by Night', startTime: '00:00', endTime: '04:00' },
+    { name: 'Gospel Hits', startTime: '04:00', endTime: '06:00' },
+    { name: 'Morning Jam', startTime: '06:00', endTime: '09:00' },
+    { name: 'The Playlist Hits', startTime: '09:00', endTime: '14:00' },
+    { name: 'NextGen Vibes', startTime: '14:00', endTime: '16:00' },
+    { name: 'Hit Sou Hit', startTime: '16:00', endTime: '20:00' },
+    { name: 'Dominik Show', startTime: '20:00', endTime: '22:00' },
+    { name: 'Hit Sou Hit', startTime: '22:00', endTime: '24:00' },
+  ],
+  Thursday: [
+    { name: 'Hit by Night', startTime: '00:00', endTime: '04:00' },
+    { name: 'Gospel Hits', startTime: '04:00', endTime: '06:00' },
+    { name: 'Morning Jam', startTime: '06:00', endTime: '09:00' },
+    { name: 'The Playlist Hits', startTime: '09:00', endTime: '14:00' },
+    { name: 'NextGen Vibes', startTime: '14:00', endTime: '16:00' },
+    { name: 'Hit Sou Hit', startTime: '16:00', endTime: '20:00' },
+    { name: 'Dominik Show', startTime: '20:00', endTime: '22:00' },
+    { name: 'Hit Sou Hit', startTime: '22:00', endTime: '24:00' },
+  ],
+  Friday: [
+    { name: 'Hit by Night', startTime: '00:00', endTime: '04:00' },
+    { name: 'Gospel Hits', startTime: '04:00', endTime: '06:00' },
+    { name: 'Morning Jam', startTime: '06:00', endTime: '09:00' },
+    { name: 'The Playlist Hits', startTime: '09:00', endTime: '14:00' },
+    { name: 'NextGen Vibes', startTime: '14:00', endTime: '16:00' },
+    { name: 'Hit Sou Hit', startTime: '16:00', endTime: '20:00' },
+    { name: 'Dominik Show', startTime: '20:00', endTime: '22:00' },
+    { name: 'Hit Sou Hit', startTime: '22:00', endTime: '24:00' },
+  ],
+  Saturday: [
+    { name: 'Hit by Night', startTime: '00:00', endTime: '04:00' },
+    { name: 'Gospel Hits', startTime: '04:00', endTime: '07:00' },
+    { name: 'Morning Jam', startTime: '07:00', endTime: '09:00' },
+    { name: 'Hit Sou Hit', startTime: '09:00', endTime: '19:00' },
+    { name: 'Saturday Night Fever', startTime: '19:00', endTime: '24:00' },
+  ],
+  Sunday: [
+    { name: 'Hit by Night', startTime: '00:00', endTime: '04:00' },
+    { name: 'Gospel Hits', startTime: '04:00', endTime: '07:00' },
+    { name: 'Morning Jam', startTime: '07:00', endTime: '09:00' },
+    { name: 'Hit Sou Hit', startTime: '09:00', endTime: '17:00' },
+    { name: 'Retro Hits', startTime: '17:00', endTime: '24:00' },
+  ],
+};
+
+// Function to get current and next shows
+const getCurrentAndNextShows = (): { currentShow: Show | null; nextShow: Show | null } => {
+  const now = new Date();
+  const dayIndex = now.getDay(); // 0 (Sunday) to 6 (Saturday)
+  const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const today = days[dayIndex];
+  const todaysSchedule = SCHEDULE[today];
+
+  const currentHour = now.getHours();
+  const currentMinute = now.getMinutes();
+  const currentTimeInMinutes = currentHour * 60 + currentMinute;
+
+  let currentShow: Show | null = null;
+  let nextShow: Show | null = null;
+
+  if (todaysSchedule) {
+    for (let i = 0; i < todaysSchedule.length; i++) {
+      const show = todaysSchedule[i];
+      const [startHour, startMinute] = show.startTime.split(':').map(Number);
+      const [endHour, endMinute] = show.endTime.split(':').map(Number);
+
+      const startTimeInMinutes = startHour * 60 + startMinute;
+      let endTimeInMinutes = endHour * 60 + endMinute;
+
+      // Handle midnight (24:00 = 00:00 next day)
+      if (endTimeInMinutes === 0) {
+        endTimeInMinutes = 24 * 60;
+      }
+
+      // Check if current time is within this show's time range
+      if (currentTimeInMinutes >= startTimeInMinutes && currentTimeInMinutes < endTimeInMinutes) {
+        currentShow = show;
+      } else if (currentTimeInMinutes < startTimeInMinutes && nextShow === null) {
+        // This is the next show today
+        nextShow = show;
+      }
+    }
+  }
+
+  // If no next show found today, get the first show of the next day
+  if (!nextShow) {
+    let nextDayIndex = (dayIndex + 1) % 7;
+    let nextDay = days[nextDayIndex];
+    let nextDaySchedule = SCHEDULE[nextDay];
+
+    if (nextDaySchedule && nextDaySchedule.length > 0) {
+      nextShow = nextDaySchedule[0];
+    }
+  }
+
+  return { currentShow, nextShow };
+};
+
 export default function HomeScreen() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [metadata, setMetadata] = useState<LiveMetadata | null>(null);
   const [loading, setLoading] = useState(false);
+  const [currentShow, setCurrentShow] = useState<Show | null>(null);
+  const [nextShow, setNextShow] = useState<Show | null>(null);
   const metadataInterval = useRef<NodeJS.Timeout | null>(null);
+  const showUpdateInterval = useRef<NodeJS.Timeout | null>(null);
   const router = useRouter();
   const rotation = useSharedValue(0);
   const audioManager = AudioManager.getInstance();
@@ -63,6 +197,13 @@ export default function HomeScreen() {
     }
   }, []);
 
+  const updateShows = useCallback(() => {
+    const { currentShow: current, nextShow: next } = getCurrentAndNextShows();
+    console.log('[Home] Updated shows - Current:', current?.name, 'Next:', next?.name);
+    setCurrentShow(current);
+    setNextShow(next);
+  }, []);
+
   const startMetadataPolling = useCallback(() => {
     fetchMetadata();
     metadataInterval.current = setInterval(fetchMetadata, METADATA_POLL_INTERVAL);
@@ -79,10 +220,17 @@ export default function HomeScreen() {
     // Start polling metadata when component mounts
     startMetadataPolling();
 
+    // Update shows immediately and then every minute
+    updateShows();
+    showUpdateInterval.current = setInterval(updateShows, 60000); // Update every minute
+
     return () => {
       stopMetadataPolling();
+      if (showUpdateInterval.current) {
+        clearInterval(showUpdateInterval.current);
+      }
     };
-  }, [startMetadataPolling, stopMetadataPolling]);
+  }, [startMetadataPolling, stopMetadataPolling, updateShows]);
 
   const togglePlayback = async () => {
     try {
@@ -166,46 +314,73 @@ export default function HomeScreen() {
             </Text>
           </TouchableOpacity>
 
-          {/* Quick Links */}
-          <View style={styles.quickLinksContainer}>
-            <TouchableOpacity
-              style={styles.quickLinkCard}
-              onPress={() => router.push('/news')}
-            >
-              <IconSymbol
-                ios_icon_name="newspaper.fill"
-                android_material_icon_name="article"
-                size={32}
-                color="#FFD700"
-              />
-              <Text style={styles.quickLinkText}>News</Text>
-            </TouchableOpacity>
+          {/* Current Show and Next Show Cards */}
+          <View style={styles.showCardsContainer}>
+            {/* Current Show Card */}
+            <View style={styles.showCard}>
+              <View style={styles.showCardHeader}>
+                <IconSymbol
+                  ios_icon_name="radio"
+                  android_material_icon_name="radio"
+                  size={20}
+                  color="#FFD700"
+                />
+                <Text style={styles.showCardLabel}>CURRENT SHOW</Text>
+              </View>
+              {currentShow ? (
+                <React.Fragment>
+                  <Text style={styles.showName} numberOfLines={2}>
+                    {currentShow.name}
+                  </Text>
+                  <View style={styles.showTimeContainer}>
+                    <IconSymbol
+                      ios_icon_name="clock"
+                      android_material_icon_name="access-time"
+                      size={14}
+                      color="#B8B8B8"
+                    />
+                    <Text style={styles.showTime}>
+                      {currentShow.startTime}–{currentShow.endTime}
+                    </Text>
+                  </View>
+                </React.Fragment>
+              ) : (
+                <Text style={styles.noShowText}>No show scheduled</Text>
+              )}
+            </View>
 
-            <TouchableOpacity
-              style={styles.quickLinkCard}
-              onPress={() => router.push('/top10')}
-            >
-              <IconSymbol
-                ios_icon_name="chart.bar.fill"
-                android_material_icon_name="bar-chart"
-                size={32}
-                color="#FFD700"
-              />
-              <Text style={styles.quickLinkText}>Top 10</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.quickLinkCard}
-              onPress={() => router.push('/events')}
-            >
-              <IconSymbol
-                ios_icon_name="calendar"
-                android_material_icon_name="event"
-                size={32}
-                color="#FFD700"
-              />
-              <Text style={styles.quickLinkText}>Events</Text>
-            </TouchableOpacity>
+            {/* Next Show Card */}
+            <View style={styles.showCard}>
+              <View style={styles.showCardHeader}>
+                <IconSymbol
+                  ios_icon_name="clock.arrow.circlepath"
+                  android_material_icon_name="schedule"
+                  size={20}
+                  color="#FFD700"
+                />
+                <Text style={styles.showCardLabel}>NEXT SHOW</Text>
+              </View>
+              {nextShow ? (
+                <React.Fragment>
+                  <Text style={styles.showName} numberOfLines={2}>
+                    {nextShow.name}
+                  </Text>
+                  <View style={styles.showTimeContainer}>
+                    <IconSymbol
+                      ios_icon_name="clock"
+                      android_material_icon_name="access-time"
+                      size={14}
+                      color="#B8B8B8"
+                    />
+                    <Text style={styles.showTime}>
+                      {nextShow.startTime}–{nextShow.endTime}
+                    </Text>
+                  </View>
+                </React.Fragment>
+              ) : (
+                <Text style={styles.noShowText}>No show scheduled</Text>
+              )}
+            </View>
           </View>
         </ScrollView>
       </SafeAreaView>
@@ -326,25 +501,51 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginLeft: 10,
   },
-  quickLinksContainer: {
+  showCardsContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     gap: 12,
   },
-  quickLinkCard: {
+  showCard: {
     flex: 1,
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
     borderRadius: 15,
-    padding: 20,
-    alignItems: 'center',
+    padding: 16,
     borderWidth: 1,
     borderColor: 'rgba(255, 215, 0, 0.2)',
+    minHeight: 120,
   },
-  quickLinkText: {
+  showCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    gap: 6,
+  },
+  showCardLabel: {
+    color: '#FFD700',
+    fontSize: 10,
+    fontWeight: 'bold',
+    letterSpacing: 1,
+  },
+  showName: {
     color: '#FFFFFF',
-    fontSize: 12,
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 8,
+    lineHeight: 20,
+  },
+  showTimeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  showTime: {
+    color: '#B8B8B8',
+    fontSize: 13,
     fontWeight: '600',
-    marginTop: 8,
-    textAlign: 'center',
+  },
+  noShowText: {
+    color: '#888888',
+    fontSize: 14,
+    fontStyle: 'italic',
   },
 });
