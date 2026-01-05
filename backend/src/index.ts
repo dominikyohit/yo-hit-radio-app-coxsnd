@@ -6,6 +6,7 @@ import * as authSchema from './db/auth-schema.js';
 import { registerArticlesRoutes } from './routes/articles.js';
 import { registerTop10Routes } from './routes/top10.js';
 import { registerEventsRoutes } from './routes/events.js';
+import { registerMetadataRoutes } from './routes/metadata.js';
 
 // Combine schemas
 const schema = { ...appSchema, ...authSchema };
@@ -23,6 +24,7 @@ app.withAuth();
 registerArticlesRoutes(app);
 registerTop10Routes(app);
 registerEventsRoutes(app);
+registerMetadataRoutes(app);
 
 await app.run();
 app.logger.info('Application running');
