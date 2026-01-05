@@ -167,7 +167,7 @@ export default function NewsScreen() {
       setLoading(true);
       setError(null);
       
-      // Fetch directly from WordPress REST API
+      // Fetch from backend API which proxies WordPress
       const response = await fetch('https://yohitradio.com/wp-json/wp/v2/posts?_embed&per_page=10');
       
       if (!response.ok) {
@@ -175,7 +175,7 @@ export default function NewsScreen() {
       }
       
       const wpPosts: WordPressPost[] = await response.json();
-      console.log('Fetched WordPress posts:', wpPosts);
+      console.log('[News] Fetched WordPress posts:', wpPosts);
       
       // Map WordPress posts to Article format for UI
       const mappedArticles: Article[] = wpPosts.map((post) => ({
@@ -189,10 +189,10 @@ export default function NewsScreen() {
         created_at: post.date ?? '',
       }));
       
-      console.log('Mapped articles:', mappedArticles);
+      console.log('[News] Mapped articles:', mappedArticles);
       setArticles(mappedArticles);
     } catch (err) {
-      console.error('Error fetching articles:', err);
+      console.error('[News] Error fetching articles:', err);
       setError('Failed to load articles. Please try again.');
     } finally {
       setLoading(false);

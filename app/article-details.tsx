@@ -177,7 +177,7 @@ export default function ArticleDetailsScreen() {
       setLoading(true);
       setError(null);
       
-      // Fetch directly from WordPress REST API
+      // Fetch from WordPress REST API
       const response = await fetch(`https://yohitradio.com/wp-json/wp/v2/posts/${id}?_embed`);
       
       if (!response.ok) {
@@ -185,7 +185,7 @@ export default function ArticleDetailsScreen() {
       }
       
       const wpPost: WordPressPost = await response.json();
-      console.log('Fetched WordPress post:', wpPost);
+      console.log('[ArticleDetails] Fetched WordPress post:', wpPost);
       
       // Map WordPress post to Article format for UI
       const mappedArticle: Article = {
@@ -200,10 +200,10 @@ export default function ArticleDetailsScreen() {
         link: wpPost.link ?? '',
       };
       
-      console.log('Mapped article:', mappedArticle);
+      console.log('[ArticleDetails] Mapped article:', mappedArticle);
       setArticle(mappedArticle);
     } catch (err) {
-      console.error('Error fetching article:', err);
+      console.error('[ArticleDetails] Error fetching article:', err);
       setError('Failed to load article. Please try again.');
     } finally {
       setLoading(false);

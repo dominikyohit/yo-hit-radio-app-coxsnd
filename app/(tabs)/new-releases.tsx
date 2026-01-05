@@ -3,7 +3,6 @@ import React, { useState, useEffect } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
 import { IconSymbol } from '@/components/IconSymbol';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Audio } from 'expo-av';
 import { useRouter } from 'expo-router';
 import {
   View,
@@ -17,6 +16,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import { colors } from '@/styles/commonStyles';
+import AudioManager from '@/utils/audioManager';
 
 interface WordPressSong {
   id: number;
@@ -51,16 +51,8 @@ export default function NewReleasesScreen() {
   const [songs, setSongs] = useState<Song[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [sound, setSound] = useState<Audio.Sound | null>(null);
   const [playingId, setPlayingId] = useState<number | null>(null);
-
-  useEffect(() => {
-    return sound
-      ? () => {
-          sound.unloadAsync();
-        }
-      : undefined;
-  }, [sound]);
+  const audioManager = AudioManager.getInstance();
 
   useEffect(() => {
     fetchSongs();
@@ -157,29 +149,22 @@ export default function NewReleasesScreen() {
     }
 
     try {
-      if (sound && playingId === song.id) {
+      // Check if this song is currently playing
+      const currentUri = audioManager.getCurrentUri();
+      const isCurrentlyPlaying = await audioManager.isPlaying();
+      
+      if (currentUri === song.audioUrl && isCurrentlyPlaying) {
         // Stop currently playing song
-        await sound.stopAsync();
-        await sound.unloadAsync();
-        setSound(null);
+        await audioManager.stopCurrentAudio();
         setPlayingId(null);
       } else {
-        // Stop any currently playing sound
-        if (sound) {
-          await sound.stopAsync();
-          await sound.unloadAsync();
-        }
-
-        // Play new song
-        const { sound: newSound } = await Audio.Sound.createAsync(
-          { uri: song.audioUrl },
-          { shouldPlay: true }
-        );
-        setSound(newSound);
+        // Play new song (will automatically stop live stream or other songs)
+        await audioManager.playAudio(song.audioUrl, false);
         setPlayingId(song.id);
       }
     } catch (error) {
       console.error('Error playing audio:', error);
+      setPlayingId(null);
     }
   };
 
@@ -216,9 +201,9 @@ export default function NewReleasesScreen() {
           contentContainerStyle={styles.scrollContent}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.accent} />}
         >
-          {songs.map((song) => (
+          {songs.map((song, index) => (
             <TouchableOpacity
-              key={song.id}
+              key={index}
               style={styles.songCard}
               onPress={() => handleSongPress(song)}
               activeOpacity={0.7}
@@ -252,7 +237,7 @@ export default function NewReleasesScreen() {
               <View style={styles.playButton}>
                 <IconSymbol
                   ios_icon_name={playingId === song.id ? 'pause.circle.fill' : 'play.circle.fill'}
-                  android_material_icon_name={playingId === song.id ? 'pause-circle' : 'play-circle'}
+                  android_material_icon_name={playingId === song.id ? 'pause-circle-filled' : 'play-circle-filled'}
                   size={40}
                   color={colors.accent}
                 />

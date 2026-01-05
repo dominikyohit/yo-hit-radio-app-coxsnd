@@ -10,10 +10,8 @@ import {
   Dimensions,
   Platform,
 } from 'react-native';
-import { getZenoMetadata, ZenoMetadata } from '@/utils/zenoMetadata';
 import { colors } from '@/styles/commonStyles';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Audio } from 'expo-av';
 import { IconSymbol } from '@/components/IconSymbol';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -24,18 +22,20 @@ import Animated, {
   withTiming,
   Easing,
 } from 'react-native-reanimated';
+import AudioManager from '@/utils/audioManager';
+import { fetchLiveMetadata, LiveMetadata } from '@/utils/metadataService';
 
 const STREAM_URL = 'https://stream.zeno.fm/hmc38shnrwzuv';
-const METADATA_POLL_INTERVAL = 10000;
+const METADATA_POLL_INTERVAL = 12000; // 12 seconds
 
 export default function HomeScreen() {
   const [isPlaying, setIsPlaying] = useState(false);
-  const [metadata, setMetadata] = useState<ZenoMetadata | null>(null);
+  const [metadata, setMetadata] = useState<LiveMetadata | null>(null);
   const [loading, setLoading] = useState(false);
-  const sound = useRef<Audio.Sound | null>(null);
   const metadataInterval = useRef<NodeJS.Timeout | null>(null);
   const router = useRouter();
   const rotation = useSharedValue(0);
+  const audioManager = AudioManager.getInstance();
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ rotate: `${rotation.value}deg` }],
@@ -55,10 +55,11 @@ export default function HomeScreen() {
 
   const fetchMetadata = useCallback(async () => {
     try {
-      const data = await getZenoMetadata();
+      const data = await fetchLiveMetadata();
+      console.log('[Home] Fetched metadata:', data);
       setMetadata(data);
     } catch (error) {
-      console.error('Error fetching metadata:', error);
+      console.error('[Home] Error fetching metadata:', error);
     }
   }, []);
 
@@ -75,47 +76,24 @@ export default function HomeScreen() {
   }, []);
 
   useEffect(() => {
-    fetchMetadata();
+    // Start polling metadata when component mounts
     startMetadataPolling();
 
     return () => {
       stopMetadataPolling();
     };
-  }, [fetchMetadata, startMetadataPolling, stopMetadataPolling]);
-
-  useEffect(() => {
-    return () => {
-      if (sound.current) {
-        sound.current.unloadAsync();
-      }
-    };
-  }, []);
+  }, [startMetadataPolling, stopMetadataPolling]);
 
   const togglePlayback = async () => {
     try {
       if (isPlaying) {
-        if (sound.current) {
-          await sound.current.stopAsync();
-          await sound.current.unloadAsync();
-          sound.current = null;
-        }
+        // Stop live stream
+        await audioManager.stopCurrentAudio();
         setIsPlaying(false);
       } else {
+        // Start live stream (will automatically stop any on-demand song)
         setLoading(true);
-        await Audio.setAudioModeAsync({
-          playsInSilentModeIOS: true,
-          staysActiveInBackground: true,
-          shouldDuckAndroid: true,
-        });
-
-        const { sound: newSound } = await Audio.Sound.createAsync(
-          { uri: STREAM_URL },
-          { shouldPlay: true, isLooping: false },
-          null,
-          true
-        );
-
-        sound.current = newSound;
+        await audioManager.playAudio(STREAM_URL, true);
         setIsPlaying(true);
         setLoading(false);
       }
@@ -125,6 +103,10 @@ export default function HomeScreen() {
       setIsPlaying(false);
     }
   };
+
+  // Display metadata if available, otherwise show defaults
+  const displayTitle = metadata?.title || 'Yo Hit Radio';
+  const displayArtist = metadata?.artist || 'Live Stream';
 
   return (
     <LinearGradient colors={['#1a0033', '#330066', '#1a0033']} style={styles.gradient}>
@@ -150,28 +132,20 @@ export default function HomeScreen() {
           <View style={styles.nowPlayingCard}>
             <Text style={styles.nowPlayingLabel}>NOW PLAYING</Text>
             <Animated.View style={[styles.coverImageContainer, animatedStyle]}>
-              {metadata?.cover_image ? (
-                <Image
-                  source={{ uri: metadata.cover_image }}
-                  style={styles.coverImage}
-                  resizeMode="cover"
+              <View style={styles.placeholderCover}>
+                <IconSymbol
+                  ios_icon_name="music.note"
+                  android_material_icon_name="music-note"
+                  size={64}
+                  color="#FFD700"
                 />
-              ) : (
-                <View style={styles.placeholderCover}>
-                  <IconSymbol
-                    ios_icon_name="music.note"
-                    android_material_icon_name="music-note"
-                    size={64}
-                    color="#FFD700"
-                  />
-                </View>
-              )}
+              </View>
             </Animated.View>
             <Text style={styles.songTitle} numberOfLines={2}>
-              {metadata?.title || 'Yo Hit Radio'}
+              {displayTitle}
             </Text>
-            <Text style={styles.artistName} numberOfLines={1}>
-              {metadata?.artist || 'Live Stream'}
+            <Text style={styles.artistName} numberOfLines={2}>
+              {displayArtist}
             </Text>
           </View>
 
@@ -183,7 +157,7 @@ export default function HomeScreen() {
           >
             <IconSymbol
               ios_icon_name={isPlaying ? 'pause.circle.fill' : 'play.circle.fill'}
-              android_material_icon_name={isPlaying ? 'pause-circle' : 'play-circle'}
+              android_material_icon_name={isPlaying ? 'pause-circle-filled' : 'play-circle-filled'}
               size={24}
               color="#1a0033"
             />

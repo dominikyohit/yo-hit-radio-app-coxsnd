@@ -1,4 +1,10 @@
 
+/**
+ * All Charts Screen
+ * Displays historical charts from WordPress
+ * This is separate from the Top 10 voting screen
+ */
+
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
@@ -9,6 +15,7 @@ import {
   Image,
   ActivityIndicator,
   RefreshControl,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -40,14 +47,14 @@ export default function AllChartsScreen() {
   const fetchAllCharts = useCallback(async () => {
     try {
       setError(null);
-      console.log('Fetching all charts from WordPress...');
+      console.log('[AllCharts] Fetching all charts from WordPress...');
       const response = await fetch(ALL_CHARTS_URL);
       if (!response.ok) throw new Error('Failed to fetch charts');
       const data = await response.json();
-      console.log('All charts data received:', data.length, 'charts');
+      console.log('[AllCharts] All charts data received:', data.length, 'charts');
       setCharts(data);
     } catch (err) {
-      console.error('Error fetching charts:', err);
+      console.error('[AllCharts] Error fetching charts:', err);
       setError(err instanceof Error ? err.message : 'Failed to load charts');
     } finally {
       setLoading(false);
