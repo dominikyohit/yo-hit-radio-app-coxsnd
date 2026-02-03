@@ -160,12 +160,6 @@ export default function ArticleDetailsScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
 
-  useEffect(() => {
-    if (id) {
-      fetchArticle();
-    }
-  }, [id, fetchArticle]);
-
   const fetchArticle = useCallback(async () => {
     if (!id) {
       setError('No article ID provided');
@@ -209,6 +203,11 @@ export default function ArticleDetailsScreen() {
       setLoading(false);
     }
   }, [id]);
+
+  useEffect(() => {
+    if (!id) return;
+    fetchArticle();
+  }, [id, fetchArticle]);
 
   const formatDate = (dateString: string): string => {
     if (!dateString) {
