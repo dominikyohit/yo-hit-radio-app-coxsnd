@@ -15,7 +15,7 @@ import { colors } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 
 // WordPress REST API response format
 interface WordPressPost {
@@ -160,13 +160,8 @@ export default function ArticleDetailsScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
 
-  useEffect(() => {
-    if (id) {
-      fetchArticle();
-    }
-  }, [id, fetchArticle]);
-
-  const fetchArticle = useCallback(async () => {
+  // Function to fetch article details
+  async function fetchArticle() {
     if (!id) {
       setError('No article ID provided');
       setLoading(false);
@@ -208,6 +203,13 @@ export default function ArticleDetailsScreen() {
     } finally {
       setLoading(false);
     }
+  }
+
+  useEffect(() => {
+    if (!id) {
+      return;
+    }
+    fetchArticle();
   }, [id]);
 
   const formatDate = (dateString: string): string => {
