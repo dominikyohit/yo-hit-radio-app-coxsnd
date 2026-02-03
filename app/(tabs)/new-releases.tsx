@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
 import { IconSymbol } from '@/components/IconSymbol';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -28,9 +28,9 @@ interface WordPressSong {
     release_date: string;
   };
   _embedded?: {
-    'wp:featuredmedia'?: Array<{
+    'wp:featuredmedia'?: {
       source_url?: string;
-    }>;
+    }[];
   };
 }
 
@@ -54,11 +54,7 @@ export default function NewReleasesScreen() {
   const [playingId, setPlayingId] = useState<number | null>(null);
   const audioManager = AudioManager.getInstance();
 
-  useEffect(() => {
-    fetchSongs();
-  }, []);
-
-  const fetchSongs = async () => {
+  const fetchSongs = useCallback(async () => {
     try {
       const response = await fetch(SONGS_API_URL);
       const data: WordPressSong[] = await response.json();
@@ -101,7 +97,11 @@ export default function NewReleasesScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchSongs();
+  }, [fetchSongs]);
 
   const handleRefresh = () => {
     setRefreshing(true);

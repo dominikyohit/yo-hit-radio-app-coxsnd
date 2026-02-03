@@ -164,7 +164,7 @@ export default function ArticleDetailsScreen() {
     if (id) {
       fetchArticle();
     }
-  }, [id]);
+  }, [id, fetchArticle]);
 
   const fetchArticle = useCallback(async () => {
     if (!id) {
