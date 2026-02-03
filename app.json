@@ -25,7 +25,8 @@
         "backgroundColor": "#000000"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.anonymous.Natively"
+      "package": "com.yohitradio.app",
+      "googleServicesFile": "./google-services.json"
     },
     "web": {
       "favicon": "./assets/images/final_quest_240x240.png",
@@ -34,7 +35,13 @@
     "plugins": [
       "expo-font",
       "expo-router",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "onesignal-expo-plugin",
+        {
+          "mode": "development"
+        }
+      ]
     ],
     "scheme": "Yo Hit Radio",
     "experiments": {
@@ -42,7 +49,8 @@
     },
     "extra": {
       "router": {},
-      "backendUrl": "https://3xedeh9y77sk8qu3xzuw6cfa4n5b92rj.app.specular.dev"
+      "backendUrl": "https://3xedeh9y77sk8qu3xzuw6cfa4n5b92rj.app.specular.dev",
+      "oneSignalAppId": "41c0200e-69a3-4e4d-bc0d-0a53d0f6e65a"
     }
   }
 }

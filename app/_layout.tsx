@@ -17,8 +17,14 @@ import * as SplashScreen from "expo-splash-screen";
 import { Stack, router } from "expo-router";
 import { useFonts } from "expo-font";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { OneSignal } from "react-native-onesignal";
 
 SplashScreen.preventAutoHideAsync();
+
+// Initialize OneSignal
+OneSignal.initialize("41c0200e-69a3-4e4d-bc0d-0a53d0f6e65a");
+OneSignal.Notifications.requestPermission(true);
+console.log("[OneSignal] Initialized with App ID: 41c0200e-69a3-4e4d-bc0d-0a53d0f6e65a and permission requested");
 
 const CustomDarkTheme: Theme = {
   ...DarkTheme,
