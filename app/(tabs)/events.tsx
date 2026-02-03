@@ -16,7 +16,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { IconSymbol } from '@/components/IconSymbol';
 import { colors } from '@/styles/commonStyles';
 import { useRouter } from 'expo-router';
-import { parseEventDate, formatDateBadge, formatDateFull } from '@/utils/dateHelpers';
 
 interface WordPressEvent {
   id: number;
@@ -39,7 +38,7 @@ interface Event {
   id: string;
   title: string;
   event_date_raw: string;
-  event_date: Date | null;
+  event_date: Date;
   event_location: string;
   event_price: string;
   event_artists: string;
@@ -52,6 +51,81 @@ function resolveImageSource(source: string | number | ImageSourcePropType | unde
   if (!source) return { uri: '' };
   if (typeof source === 'string') return { uri: source };
   return source as ImageSourcePropType;
+}
+
+/**
+ * Parse event date as UTC to avoid timezone shifting
+ * Handles both "YYYYMMDD" format and natural language dates like "March 28, 2026"
+ * CRITICAL: Treats all dates as date-only (no time component) to avoid timezone bugs
+ */
+function parseEventDateUTC(dateString: string | undefined): Date {
+  if (!dateString) {
+    console.log('[Events] Empty date string, returning epoch');
+    return new Date(0);
+  }
+
+  // Handle YYYYMMDD format (8 digits)
+  if (dateString.match(/^\d{8}$/)) {
+    const year = parseInt(dateString.substring(0, 4), 10);
+    const month = parseInt(dateString.substring(4, 6), 10) - 1; // Month is 0-indexed
+    const day = parseInt(dateString.substring(6, 8), 10);
+    
+    // Create date as UTC to avoid timezone shifting
+    const utcDate = new Date(Date.UTC(year, month, day));
+    
+    if (!isNaN(utcDate.getTime())) {
+      console.log(`[Events] Parsed YYYYMMDD "${dateString}" to UTC: ${utcDate.toISOString()}`);
+      return utcDate;
+    }
+  }
+
+  // Handle natural language dates (e.g., "March 28, 2026")
+  // Parse the string to extract year, month, day WITHOUT timezone interpretation
+  const tempDate = new Date(dateString + ' UTC'); // Force UTC interpretation
+  if (!isNaN(tempDate.getTime())) {
+    // Extract date components from the UTC-parsed date
+    const year = tempDate.getUTCFullYear();
+    const month = tempDate.getUTCMonth();
+    const day = tempDate.getUTCDate();
+    const utcDate = new Date(Date.UTC(year, month, day));
+    
+    console.log(`[Events] Parsed natural date "${dateString}" to UTC: ${utcDate.toISOString()}`);
+    return utcDate;
+  }
+
+  console.warn(`[Events] Could not parse date "${dateString}", returning epoch`);
+  return new Date(0);
+}
+
+/**
+ * Format date for display as "Month Day" (e.g., "Mar 28")
+ * Uses UTC to avoid timezone shifting
+ */
+function formatDateBadgeUTC(date: Date): string {
+  try {
+    const month = date.toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' });
+    const day = date.toLocaleDateString('en-US', { day: 'numeric', timeZone: 'UTC' });
+    return `${month} ${day}`;
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Format date for display as "Month Day, Year" (e.g., "March 28, 2026")
+ * Uses UTC to avoid timezone shifting
+ */
+function formatDateFullUTC(date: Date): string {
+  try {
+    return date.toLocaleDateString('en-US', { 
+      month: 'long', 
+      day: 'numeric', 
+      year: 'numeric',
+      timeZone: 'UTC'
+    });
+  } catch {
+    return '';
+  }
 }
 
 export default function EventsScreen() {
@@ -68,10 +142,10 @@ export default function EventsScreen() {
     try {
       setLoading(true);
       setError(null);
-      console.log('[Events] Fetching events from WordPress API...');
+      console.log('[Events] Fetching events from WordPress API (limit 20)...');
       
-      // Fetch events from API
-      const response = await fetch('https://yohitradio.com/wp-json/wp/v2/bal?_embed&per_page=100');
+      // Fetch only first 20 events
+      const response = await fetch('https://yohitradio.com/wp-json/wp/v2/bal?_embed&per_page=20');
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -80,15 +154,9 @@ export default function EventsScreen() {
       const data: WordPressEvent[] = await response.json();
       console.log('[Events] Fetched raw events:', data.length);
 
-      // Get today's date at midnight for comparison (local date, no time)
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      console.log('[Events] Today (local):', today.toDateString());
-
-      // Process, filter, and sort events
       const processedEvents: Event[] = data
         .map((event) => {
-          const eventDate = parseEventDate(event.acf?.event_date);
+          const eventDate = parseEventDateUTC(event.acf?.event_date);
           
           return {
             id: String(event.id),
@@ -102,32 +170,12 @@ export default function EventsScreen() {
             flyer_image: event._embedded?.['wp:featuredmedia']?.[0]?.source_url || null,
           };
         })
-        .filter((event) => {
-          // Keep only upcoming events (event_date >= today)
-          if (!event.event_date) {
-            console.log('[Events] Filtering out event with invalid date:', event.title);
-            return false;
-          }
-          
-          // Normalize event date to midnight for comparison
-          const eventDateNormalized = new Date(event.event_date);
-          eventDateNormalized.setHours(0, 0, 0, 0);
-          
-          const isUpcoming = eventDateNormalized >= today;
-          if (!isUpcoming) {
-            console.log('[Events] Filtering out past event:', event.title, eventDateNormalized.toDateString());
-          }
-          return isUpcoming;
-        })
         .sort((a, b) => {
-          // Sort ascending by date (upcoming events first)
-          const timeA = a.event_date?.getTime() || 0;
-          const timeB = b.event_date?.getTime() || 0;
-          return timeA - timeB;
-        })
-        .slice(0, 20); // Show only first 20 upcoming events
+          // Sort ascending (upcoming events first)
+          return a.event_date.getTime() - b.event_date.getTime();
+        });
 
-      console.log('[Events] Processed, filtered, and sorted events:', processedEvents.length);
+      console.log('[Events] Processed and sorted events:', processedEvents.length);
       setEvents(processedEvents);
     } catch (err) {
       console.error('[Events] Error fetching events:', err);
@@ -205,8 +253,8 @@ export default function EventsScreen() {
             showsVerticalScrollIndicator={false}
           >
             {events.map((event, index) => {
-              const dateBadgeText = formatDateBadge(event.event_date);
-              const fullDateText = formatDateFull(event.event_date);
+              const dateBadgeText = formatDateBadgeUTC(event.event_date);
+              const fullDateText = formatDateFullUTC(event.event_date);
               
               return (
                 <TouchableOpacity
