@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -38,7 +38,7 @@ export default function EventDetailsScreen() {
   const ticketLink = String(params.ticket_link || '');
   const flyerImage = String(params.flyer_image || '');
   
-  const [loading, setLoading] = useState(false);
+  const [loading] = useState(false);
   
   const eventDate = parseEventDate(eventDateRaw);
   const formattedDate = formatDateFull(eventDate);
