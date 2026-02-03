@@ -9,23 +9,49 @@ import {
   Image,
   Platform,
   ActivityIndicator,
+  ImageSourcePropType,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { IconSymbol } from '@/components/IconSymbol';
 import { colors } from '@/styles/commonStyles';
 import { useRouter } from 'expo-router';
-import { apiGet } from '@/utils/api';
+import { parseEventDate, formatDateBadge, formatDateFull } from '@/utils/dateHelpers';
+
+interface WordPressEvent {
+  id: number;
+  title: { rendered: string };
+  acf: {
+    event_date: string;
+    event_location: string;
+    event_price: string;
+    event_artists: string;
+    ticket_link: string;
+  };
+  _embedded?: {
+    'wp:featuredmedia'?: {
+      source_url?: string;
+    }[];
+  };
+}
 
 interface Event {
   id: string;
   title: string;
-  description: string;
-  flyer_image_url: string | null;
-  event_date: string;
-  location: string;
-  ticket_url: string | null;
-  created_at: string;
+  event_date_raw: string;
+  event_date: Date;
+  event_location: string;
+  event_price: string;
+  event_artists: string;
+  ticket_link: string;
+  flyer_image: string | null;
+}
+
+// Helper to resolve image sources (handles both local and remote URLs)
+function resolveImageSource(source: string | number | ImageSourcePropType | undefined): ImageSourcePropType {
+  if (!source) return { uri: '' };
+  if (typeof source === 'string') return { uri: source };
+  return source as ImageSourcePropType;
 }
 
 export default function EventsScreen() {
@@ -42,10 +68,47 @@ export default function EventsScreen() {
     try {
       setLoading(true);
       setError(null);
-      console.log('[Events] Fetching events from API...');
-      const data = await apiGet<Event[]>('/api/events');
-      console.log('[Events] Fetched events:', data);
-      setEvents(data);
+      console.log('[Events] Fetching events from WordPress API...');
+      
+      const response = await fetch('https://yohitradio.com/wp-json/wp/v2/bal?_embed');
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const data: WordPressEvent[] = await response.json();
+      console.log('[Events] Fetched raw events:', data.length);
+
+      const processedEvents: Event[] = data
+        .map((event) => {
+          const eventDate = parseEventDate(event.acf?.event_date);
+          
+          return {
+            id: String(event.id),
+            title: event.title.rendered,
+            event_date_raw: event.acf?.event_date || '',
+            event_date: eventDate,
+            event_location: event.acf?.event_location || '',
+            event_price: event.acf?.event_price || '',
+            event_artists: event.acf?.event_artists || '',
+            ticket_link: event.acf?.ticket_link || '',
+            flyer_image: event._embedded?.['wp:featuredmedia']?.[0]?.source_url || null,
+          };
+        })
+        .sort((a, b) => {
+          // Sort from newest/upcoming to oldest (ascending order)
+          const timeA = a.event_date.getTime();
+          const timeB = b.event_date.getTime();
+          
+          if (timeA === timeB) {
+            return 0;
+          }
+          
+          return timeA - timeB; // Ascending order (earliest/upcoming first)
+        });
+
+      console.log('[Events] Processed and sorted events:', processedEvents.length);
+      setEvents(processedEvents);
     } catch (err) {
       console.error('[Events] Error fetching events:', err);
       setError('Failed to load events. Please try again.');
@@ -54,24 +117,19 @@ export default function EventsScreen() {
     }
   };
 
-  const formatDate = (dateString: string) => {
-    try {
-      const date = new Date(dateString);
-      return date.toLocaleDateString('en-US', { 
-        month: 'long', 
-        day: 'numeric', 
-        year: 'numeric' 
-      });
-    } catch {
-      return dateString;
-    }
-  };
-
   const handleEventPress = (event: Event) => {
+    console.log('[Events] Opening event details:', event.id);
     router.push({
       pathname: '/event-details',
       params: {
         id: event.id,
+        title: event.title,
+        event_date_raw: event.event_date_raw,
+        event_location: event.event_location,
+        event_price: event.event_price,
+        event_artists: event.event_artists,
+        ticket_link: event.ticket_link,
+        flyer_image: event.flyer_image || '',
       },
     });
   };
@@ -126,56 +184,99 @@ export default function EventsScreen() {
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
           >
-            {events.map((event) => (
-              <TouchableOpacity
-                key={event.id}
-                style={styles.eventCard}
-                onPress={() => handleEventPress(event)}
-                activeOpacity={0.8}
-              >
-                {event.flyer_image_url && (
-                  <Image
-                    source={{ uri: event.flyer_image_url }}
-                    style={styles.flyerImage}
-                    resizeMode="cover"
-                  />
-                )}
-                <View style={styles.eventContent}>
-                  <Text style={styles.eventTitle} numberOfLines={2}>
-                    {event.title}
-                  </Text>
-                  <View style={styles.eventDetail}>
-                    <IconSymbol
-                      ios_icon_name="calendar"
-                      android_material_icon_name="calendar-today"
-                      size={16}
-                      color={colors.accent}
-                    />
-                    <Text style={styles.eventDetailText}>
-                      {formatDate(event.event_date)}
+            {events.map((event, index) => {
+              const dateBadgeText = formatDateBadge(event.event_date);
+              const fullDateText = formatDateFull(event.event_date);
+              
+              return (
+                <TouchableOpacity
+                  key={index}
+                  style={styles.eventCard}
+                  onPress={() => handleEventPress(event)}
+                  activeOpacity={0.8}
+                >
+                  {event.flyer_image && (
+                    <View style={styles.imageContainer}>
+                      <Image
+                        source={resolveImageSource(event.flyer_image)}
+                        style={styles.flyerImage}
+                        resizeMode="cover"
+                      />
+                      <View style={styles.badgesContainer}>
+                        {dateBadgeText && (
+                          <View style={styles.dateBadge}>
+                            <Text style={styles.dateBadgeText}>{dateBadgeText}</Text>
+                          </View>
+                        )}
+                        {event.event_price && (
+                          <View style={styles.priceBadge}>
+                            <Text style={styles.priceBadgeText}>{event.event_price}</Text>
+                          </View>
+                        )}
+                      </View>
+                    </View>
+                  )}
+                  
+                  <View style={styles.eventContent}>
+                    <Text style={styles.eventTitle} numberOfLines={2}>
+                      {event.title}
                     </Text>
+                    
+                    {event.event_artists && (
+                      <View style={styles.eventDetail}>
+                        <IconSymbol
+                          ios_icon_name="music.note"
+                          android_material_icon_name="music-note"
+                          size={16}
+                          color={colors.accent}
+                        />
+                        <Text style={styles.eventDetailText} numberOfLines={2}>
+                          {event.event_artists}
+                        </Text>
+                      </View>
+                    )}
+                    
+                    {fullDateText && (
+                      <View style={styles.eventDetail}>
+                        <IconSymbol
+                          ios_icon_name="calendar"
+                          android_material_icon_name="calendar-today"
+                          size={16}
+                          color={colors.accent}
+                        />
+                        <Text style={styles.eventDetailText}>
+                          {fullDateText}
+                        </Text>
+                      </View>
+                    )}
+                    
+                    {event.event_location && (
+                      <View style={styles.eventDetail}>
+                        <IconSymbol
+                          ios_icon_name="location"
+                          android_material_icon_name="location-on"
+                          size={16}
+                          color={colors.accent}
+                        />
+                        <Text style={styles.eventDetailText} numberOfLines={1}>
+                          {event.event_location}
+                        </Text>
+                      </View>
+                    )}
+                    
+                    <View style={styles.eventFooter}>
+                      <Text style={styles.viewDetailsText}>View Details</Text>
+                      <IconSymbol
+                        ios_icon_name="chevron.right"
+                        android_material_icon_name="chevron-right"
+                        size={20}
+                        color={colors.accent}
+                      />
+                    </View>
                   </View>
-                  <View style={styles.eventDetail}>
-                    <IconSymbol
-                      ios_icon_name="location"
-                      android_material_icon_name="location-on"
-                      size={16}
-                      color={colors.accent}
-                    />
-                    <Text style={styles.eventDetailText}>{event.location}</Text>
-                  </View>
-                  <View style={styles.eventFooter}>
-                    <Text style={styles.viewDetailsText}>View Details</Text>
-                    <IconSymbol
-                      ios_icon_name="chevron.right"
-                      android_material_icon_name="chevron-right"
-                      size={20}
-                      color={colors.accent}
-                    />
-                  </View>
-                </View>
-              </TouchableOpacity>
-            ))}
+                </TouchableOpacity>
+              );
+            })}
           </ScrollView>
         )}
       </SafeAreaView>
@@ -213,26 +314,69 @@ const styles = StyleSheet.create({
   eventCard: {
     backgroundColor: 'rgba(45, 27, 78, 0.8)',
     borderRadius: 16,
-    marginBottom: 16,
+    marginBottom: 20,
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: colors.cardBorder,
     boxShadow: '0px 4px 12px rgba(0, 0, 0, 0.3)',
     elevation: 4,
   },
+  imageContainer: {
+    position: 'relative',
+    width: '100%',
+    height: 240,
+  },
   flyerImage: {
     width: '100%',
-    height: 200,
+    height: '100%',
     backgroundColor: colors.card,
+  },
+  badgesContainer: {
+    position: 'absolute',
+    top: 12,
+    left: 12,
+    right: 12,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  dateBadge: {
+    backgroundColor: colors.accent,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    boxShadow: '0px 2px 8px rgba(0, 0, 0, 0.3)',
+    elevation: 3,
+  },
+  dateBadgeText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.background,
+  },
+  priceBadge: {
+    backgroundColor: 'rgba(107, 70, 193, 0.95)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.accent,
+    boxShadow: '0px 2px 8px rgba(0, 0, 0, 0.3)',
+    elevation: 3,
+  },
+  priceBadgeText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.text,
   },
   eventContent: {
     padding: 16,
   },
   eventTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '700',
     color: colors.text,
     marginBottom: 12,
+    lineHeight: 28,
   },
   eventDetail: {
     flexDirection: 'row',
@@ -243,6 +387,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.textSecondary,
     marginLeft: 8,
+    flex: 1,
   },
   eventFooter: {
     flexDirection: 'row',
