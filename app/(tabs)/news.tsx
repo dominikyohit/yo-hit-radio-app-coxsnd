@@ -4,7 +4,7 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
+  FlatList,
   TouchableOpacity,
   Image,
   Platform,
@@ -13,7 +13,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { colors } from '@/styles/commonStyles';
 import { decodeHtmlEntities } from '@/utils/htmlDecoder';
 
@@ -62,9 +62,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#0a0015',
-  },
-  scrollContent: {
-    paddingBottom: 100,
   },
   header: {
     paddingHorizontal: 20,
@@ -151,32 +148,56 @@ const styles = StyleSheet.create({
     fontSize: 16,
     textAlign: 'center',
   },
+  footerLoader: {
+    paddingVertical: 20,
+    alignItems: 'center',
+  },
+  listContent: {
+    paddingBottom: 100,
+  },
 });
 
 export default function NewsScreen() {
   const [articles, setArticles] = useState<Article[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
   const router = useRouter();
 
   useEffect(() => {
-    fetchArticles();
+    fetchArticles(1);
   }, []);
 
-  const fetchArticles = async () => {
+  const fetchArticles = async (pageNumber: number) => {
+    console.log('[News] Fetching articles for page:', pageNumber);
+    
+    // Prevent multiple simultaneous requests
+    if (pageNumber > 1 && loadingMore) {
+      console.log('[News] Already loading more, skipping request');
+      return;
+    }
+
     try {
-      setLoading(true);
+      if (pageNumber === 1) {
+        setLoading(true);
+      } else {
+        setLoadingMore(true);
+      }
       setError(null);
       
-      // Fetch from backend API which proxies WordPress
-      const response = await fetch('https://yohitradio.com/wp-json/wp/v2/posts?_embed&per_page=10');
+      // Fetch 20 articles per page
+      const response = await fetch(
+        `https://yohitradio.com/wp-json/wp/v2/posts?_embed&per_page=20&page=${pageNumber}`
+      );
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       
       const wpPosts: WordPressPost[] = await response.json();
-      console.log('[News] Fetched WordPress posts:', wpPosts);
+      console.log('[News] Fetched WordPress posts:', wpPosts.length, 'articles');
       
       // Map WordPress posts to Article format for UI
       const mappedArticles: Article[] = wpPosts.map((post) => {
@@ -194,15 +215,37 @@ export default function NewsScreen() {
         };
       });
       
-      console.log('[News] Mapped articles:', mappedArticles);
-      setArticles(mappedArticles);
+      // If we got fewer than 20 articles, we've reached the end
+      if (mappedArticles.length < 20) {
+        setHasMore(false);
+        console.log('[News] Reached end of articles');
+      }
+      
+      if (pageNumber === 1) {
+        setArticles(mappedArticles);
+      } else {
+        // Append new articles to existing ones
+        setArticles((prev) => [...prev, ...mappedArticles]);
+      }
+      
+      setPage(pageNumber);
     } catch (err) {
       console.error('[News] Error fetching articles:', err);
-      setError('Failed to load articles. Please try again.');
+      if (pageNumber === 1) {
+        setError('Failed to load articles. Please try again.');
+      }
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
   };
+
+  const loadMoreArticles = useCallback(() => {
+    if (!loadingMore && hasMore) {
+      console.log('[News] Loading more articles, next page:', page + 1);
+      fetchArticles(page + 1);
+    }
+  }, [loadingMore, hasMore, page]);
 
   const formatDate = (dateString: string): string => {
     // Handle empty or invalid dates
@@ -230,13 +273,72 @@ export default function NewsScreen() {
   };
 
   const handleArticlePress = (article: Article) => {
+    console.log('[News] User tapped article:', article.title);
     router.push({
       pathname: '/article-details',
       params: { id: article.id },
     });
   };
 
-  if (loading) {
+  const renderArticleItem = ({ item }: { item: Article }) => {
+    const formattedDate = formatDate(item.published_date);
+    
+    return (
+      <TouchableOpacity
+        style={styles.articleCard}
+        onPress={() => handleArticlePress(item)}
+        activeOpacity={0.8}
+      >
+        {item.featured_image_url && (
+          <Image
+            source={{ uri: item.featured_image_url }}
+            style={styles.articleImage}
+            resizeMode="cover"
+          />
+        )}
+        <View style={styles.articleContent}>
+          <Text style={styles.articleTitle} numberOfLines={2}>
+            {item.title || 'Untitled'}
+          </Text>
+          <Text style={styles.articleExcerpt} numberOfLines={2}>
+            {item.excerpt}
+          </Text>
+          {formattedDate && (
+            <Text style={styles.articleDate}>{formattedDate}</Text>
+          )}
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
+  const renderFooter = () => {
+    if (!loadingMore) return null;
+    
+    return (
+      <View style={styles.footerLoader}>
+        <ActivityIndicator size="small" color={colors.primary} />
+      </View>
+    );
+  };
+
+  const renderHeader = () => (
+    <View style={styles.header}>
+      <Text style={styles.title}>News</Text>
+      <Text style={styles.subtitle}>Latest updates from Yo Hit Radio</Text>
+    </View>
+  );
+
+  const renderEmpty = () => {
+    if (loading) return null;
+    
+    return (
+      <View style={styles.emptyContainer}>
+        <Text style={styles.emptyText}>No articles available</Text>
+      </View>
+    );
+  };
+
+  if (loading && page === 1) {
     return (
       <LinearGradient colors={['#1a0033', '#0a0015']} style={styles.container}>
         <SafeAreaView style={styles.loadingContainer}>
@@ -246,12 +348,12 @@ export default function NewsScreen() {
     );
   }
 
-  if (error) {
+  if (error && page === 1) {
     return (
       <LinearGradient colors={['#1a0033', '#0a0015']} style={styles.container}>
         <SafeAreaView style={styles.errorContainer}>
           <Text style={styles.errorText}>{error}</Text>
-          <TouchableOpacity style={styles.retryButton} onPress={fetchArticles}>
+          <TouchableOpacity style={styles.retryButton} onPress={() => fetchArticles(1)}>
             <Text style={styles.retryButtonText}>Retry</Text>
           </TouchableOpacity>
         </SafeAreaView>
@@ -262,50 +364,17 @@ export default function NewsScreen() {
   return (
     <LinearGradient colors={['#1a0033', '#0a0015']} style={styles.container}>
       <SafeAreaView style={{ flex: 1 }}>
-        <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.scrollContent}>
-          <View style={styles.header}>
-            <Text style={styles.title}>News</Text>
-            <Text style={styles.subtitle}>Latest updates from Yo Hit Radio</Text>
-          </View>
-
-          {articles.length === 0 ? (
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>No articles available</Text>
-            </View>
-          ) : (
-            articles.map((article) => {
-              const formattedDate = formatDate(article.published_date);
-              
-              return (
-                <TouchableOpacity
-                  key={article.id}
-                  style={styles.articleCard}
-                  onPress={() => handleArticlePress(article)}
-                  activeOpacity={0.8}
-                >
-                  {article.featured_image_url && (
-                    <Image
-                      source={{ uri: article.featured_image_url }}
-                      style={styles.articleImage}
-                      resizeMode="cover"
-                    />
-                  )}
-                  <View style={styles.articleContent}>
-                    <Text style={styles.articleTitle} numberOfLines={2}>
-                      {article.title || 'Untitled'}
-                    </Text>
-                    <Text style={styles.articleExcerpt} numberOfLines={2}>
-                      {article.excerpt}
-                    </Text>
-                    {formattedDate && (
-                      <Text style={styles.articleDate}>{formattedDate}</Text>
-                    )}
-                  </View>
-                </TouchableOpacity>
-              );
-            })
-          )}
-        </ScrollView>
+        <FlatList
+          data={articles}
+          renderItem={renderArticleItem}
+          keyExtractor={(item) => item.id}
+          ListHeaderComponent={renderHeader}
+          ListFooterComponent={renderFooter}
+          ListEmptyComponent={renderEmpty}
+          contentContainerStyle={styles.listContent}
+          onEndReached={loadMoreArticles}
+          onEndReachedThreshold={0.5}
+        />
       </SafeAreaView>
     </LinearGradient>
   );

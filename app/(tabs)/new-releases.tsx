@@ -8,7 +8,7 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
+  FlatList,
   TouchableOpacity,
   Image,
   Platform,
@@ -45,20 +45,43 @@ interface Song {
   sortDate: Date; // Used for sorting
 }
 
-const SONGS_API_URL = 'https://yohitradio.com/wp-json/wp/v2/song?per_page=10&orderby=date&order=desc&_embed';
-
 export default function NewReleasesScreen() {
   const router = useRouter();
   const [songs, setSongs] = useState<Song[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [playingId, setPlayingId] = useState<number | null>(null);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
   const audioManager = AudioManager.getInstance();
 
-  const fetchSongs = useCallback(async () => {
+  useEffect(() => {
+    fetchSongs(1);
+  }, []);
+
+  const fetchSongs = useCallback(async (pageNumber: number) => {
+    console.log('[Releases] Fetching songs for page:', pageNumber);
+    
+    // Prevent multiple simultaneous requests
+    if (pageNumber > 1 && loadingMore) {
+      console.log('[Releases] Already loading more, skipping request');
+      return;
+    }
+
     try {
-      const response = await fetch(SONGS_API_URL);
+      if (pageNumber === 1) {
+        setLoading(true);
+      } else {
+        setLoadingMore(true);
+      }
+      
+      // Fetch 20 songs per page
+      const response = await fetch(
+        `https://yohitradio.com/wp-json/wp/v2/song?per_page=20&page=${pageNumber}&orderby=date&order=desc&_embed`
+      );
       const data: WordPressSong[] = await response.json();
+      console.log('[Releases] Fetched songs:', data.length, 'songs');
 
       const formattedSongs: Song[] = data.map((song) => {
         // Determine which date to use for sorting
@@ -93,22 +116,41 @@ export default function NewReleasesScreen() {
         return b.sortDate.getTime() - a.sortDate.getTime();
       });
 
-      setSongs(sortedSongs);
+      // If we got fewer than 20 songs, we've reached the end
+      if (sortedSongs.length < 20) {
+        setHasMore(false);
+        console.log('[Releases] Reached end of songs');
+      }
+
+      if (pageNumber === 1) {
+        setSongs(sortedSongs);
+      } else {
+        // Append new songs to existing ones
+        setSongs((prev) => [...prev, ...sortedSongs]);
+      }
+      
+      setPage(pageNumber);
     } catch (error) {
-      console.error('Error fetching songs:', error);
+      console.error('[Releases] Error fetching songs:', error);
     } finally {
       setLoading(false);
+      setLoadingMore(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [loadingMore]);
 
-  useEffect(() => {
-    fetchSongs();
-  }, [fetchSongs]);
+  const loadMoreSongs = useCallback(() => {
+    if (!loadingMore && hasMore) {
+      console.log('[Releases] Loading more songs, next page:', page + 1);
+      fetchSongs(page + 1);
+    }
+  }, [loadingMore, hasMore, page, fetchSongs]);
 
   const handleRefresh = () => {
+    console.log('[Releases] User refreshing releases');
     setRefreshing(true);
-    fetchSongs();
+    setHasMore(true);
+    fetchSongs(1);
   };
 
   const formatDate = (releaseDate: string | undefined, fallbackDate: string): string => {
@@ -146,8 +188,10 @@ export default function NewReleasesScreen() {
   };
 
   const handleSongPress = async (song: Song) => {
+    console.log('[Releases] User tapped song:', song.title);
+    
     if (!song.audioUrl) {
-      console.log('No audio URL available for this song');
+      console.log('[Releases] No audio URL available for this song');
       return;
     }
 
@@ -166,12 +210,71 @@ export default function NewReleasesScreen() {
         setPlayingId(song.id);
       }
     } catch (error) {
-      console.error('Error playing audio:', error);
+      console.error('[Releases] Error playing audio:', error);
       setPlayingId(null);
     }
   };
 
-  if (loading) {
+  const renderSongItem = ({ item }: { item: Song }) => (
+    <TouchableOpacity
+      style={styles.songCard}
+      onPress={() => handleSongPress(item)}
+      activeOpacity={0.7}
+    >
+      {item.coverImage ? (
+        <Image
+          source={{ uri: item.coverImage }}
+          style={styles.coverImage}
+        />
+      ) : (
+        <View style={styles.placeholderCover}>
+          <IconSymbol
+            ios_icon_name="music.note"
+            android_material_icon_name="music-note"
+            size={30}
+            color="rgba(255, 255, 255, 0.3)"
+          />
+        </View>
+      )}
+      <View style={styles.songInfo}>
+        <Text style={styles.songTitle} numberOfLines={1}>
+          {item.title}
+        </Text>
+        <Text style={styles.artistName} numberOfLines={1}>
+          {item.artist}
+        </Text>
+        {item.releaseDate && (
+          <Text style={styles.releaseDate}>{item.releaseDate}</Text>
+        )}
+      </View>
+      <View style={styles.playButton}>
+        <IconSymbol
+          ios_icon_name={playingId === item.id ? 'pause.circle.fill' : 'play.circle.fill'}
+          android_material_icon_name={playingId === item.id ? 'pause-circle-filled' : 'play-circle-filled'}
+          size={40}
+          color={colors.accent}
+        />
+      </View>
+    </TouchableOpacity>
+  );
+
+  const renderFooter = () => {
+    if (!loadingMore) return null;
+    
+    return (
+      <View style={styles.footerLoader}>
+        <ActivityIndicator size="small" color={colors.accent} />
+      </View>
+    );
+  };
+
+  const renderHeader = () => (
+    <View style={styles.header}>
+      <Text style={styles.headerTitle}>New Releases</Text>
+    </View>
+  );
+
+  if (loading && page === 1) {
     return (
       <LinearGradient
         colors={[colors.background, colors.card, colors.background]}
@@ -195,59 +298,23 @@ export default function NewReleasesScreen() {
       style={styles.gradient}
     >
       <SafeAreaView style={styles.container} edges={['top']}>
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>New Releases</Text>
-        </View>
-
-        <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={styles.scrollContent}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.accent} />}
-        >
-          {songs.map((song, index) => (
-            <TouchableOpacity
-              key={index}
-              style={styles.songCard}
-              onPress={() => handleSongPress(song)}
-              activeOpacity={0.7}
-            >
-              {song.coverImage ? (
-                <Image
-                  source={{ uri: song.coverImage }}
-                  style={styles.coverImage}
-                />
-              ) : (
-                <View style={styles.placeholderCover}>
-                  <IconSymbol
-                    ios_icon_name="music.note"
-                    android_material_icon_name="music-note"
-                    size={30}
-                    color="rgba(255, 255, 255, 0.3)"
-                  />
-                </View>
-              )}
-              <View style={styles.songInfo}>
-                <Text style={styles.songTitle} numberOfLines={1}>
-                  {song.title}
-                </Text>
-                <Text style={styles.artistName} numberOfLines={1}>
-                  {song.artist}
-                </Text>
-                {song.releaseDate && (
-                  <Text style={styles.releaseDate}>{song.releaseDate}</Text>
-                )}
-              </View>
-              <View style={styles.playButton}>
-                <IconSymbol
-                  ios_icon_name={playingId === song.id ? 'pause.circle.fill' : 'play.circle.fill'}
-                  android_material_icon_name={playingId === song.id ? 'pause-circle-filled' : 'play-circle-filled'}
-                  size={40}
-                  color={colors.accent}
-                />
-              </View>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
+        <FlatList
+          data={songs}
+          renderItem={renderSongItem}
+          keyExtractor={(item) => String(item.id)}
+          ListHeaderComponent={renderHeader}
+          ListFooterComponent={renderFooter}
+          contentContainerStyle={styles.listContent}
+          refreshControl={
+            <RefreshControl 
+              refreshing={refreshing} 
+              onRefresh={handleRefresh} 
+              tintColor={colors.accent} 
+            />
+          }
+          onEndReached={loadMoreSongs}
+          onEndReachedThreshold={0.5}
+        />
       </SafeAreaView>
     </LinearGradient>
   );
@@ -272,10 +339,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: colors.text,
   },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
+  listContent: {
     padding: 16,
     paddingBottom: 120,
   },
@@ -328,5 +392,9 @@ const styles = StyleSheet.create({
   },
   playButton: {
     padding: 4,
+  },
+  footerLoader: {
+    paddingVertical: 20,
+    alignItems: 'center',
   },
 });
