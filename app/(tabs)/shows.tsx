@@ -281,7 +281,7 @@ export default function ShowsScreen() {
                           <IconSymbol
                             ios_icon_name="music.note"
                             android_material_icon_name="music-note"
-                            size={24}
+                            size={28}
                             color="#FFD700"
                           />
                         </View>
@@ -357,10 +357,12 @@ const styles = StyleSheet.create({
   },
   showCard: {
     flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: 'rgba(255, 255, 255, 0.08)',
     borderRadius: 16,
-    padding: 12,
+    padding: 14,
     marginBottom: 12,
+    gap: 12,
     borderWidth: 1,
     borderColor: 'rgba(255, 215, 0, 0.2)',
     shadowColor: '#000',
@@ -370,23 +372,29 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   showImageContainer: {
-    marginRight: 12,
+    width: 66,
+    height: 66,
+    borderRadius: 14,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.15,
+    shadowRadius: 2,
+    elevation: 2,
   },
   showImage: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    width: '100%',
+    height: '100%',
   },
   showImagePlaceholder: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: 'rgba(255, 215, 0, 0.15)',
+    width: '100%',
+    height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 215, 0, 0.3)',
+    backgroundColor: 'rgba(255, 215, 0, 0.1)',
   },
   showInfo: {
     flex: 1,
