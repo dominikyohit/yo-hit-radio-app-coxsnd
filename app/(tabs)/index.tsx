@@ -31,11 +31,14 @@ import { decodeHtmlEntities } from '@/utils/htmlDecoder';
 
 const STREAM_URL = 'https://stream.zeno.fm/hmc38shnrwzuv';
 const METADATA_POLL_INTERVAL = 12000; // 12 seconds
+const WORDPRESS_SCHEDULE_URL = 'https://yohitradio.com/wp-json/wp/v2/calendrier?per_page=100&_embed';
 
 interface Show {
+  id: number;
   name: string;
   startTime: string;
   endTime: string;
+  imageUrl: string | null;
 }
 
 interface Schedule {
@@ -110,81 +113,30 @@ interface PreviewRelease {
   releaseDate: string;
 }
 
-// Schedule data matching the Shows tab
-const SCHEDULE: Schedule = {
-  Monday: [
-    { name: 'Hit by Night', startTime: '00:00', endTime: '04:00' },
-    { name: 'Gospel Hits', startTime: '04:00', endTime: '06:00' },
-    { name: 'Morning Jam', startTime: '06:00', endTime: '09:00' },
-    { name: 'The Playlist Hits', startTime: '09:00', endTime: '14:00' },
-    { name: 'NextGen Vibes', startTime: '14:00', endTime: '16:00' },
-    { name: 'Hit Sou Hit', startTime: '16:00', endTime: '20:00' },
-    { name: 'Dominik Show', startTime: '20:00', endTime: '22:00' },
-    { name: 'Hit Sou Hit', startTime: '22:00', endTime: '24:00' },
-  ],
-  Tuesday: [
-    { name: 'Hit by Night', startTime: '00:00', endTime: '04:00' },
-    { name: 'Gospel Hits', startTime: '04:00', endTime: '06:00' },
-    { name: 'Morning Jam', startTime: '06:00', endTime: '09:00' },
-    { name: 'The Playlist Hits', startTime: '09:00', endTime: '14:00' },
-    { name: 'NextGen Vibes', startTime: '14:00', endTime: '16:00' },
-    { name: 'Hit Sou Hit', startTime: '16:00', endTime: '20:00' },
-    { name: 'Dominik Show', startTime: '20:00', endTime: '22:00' },
-    { name: 'Hit Sou Hit', startTime: '22:00', endTime: '24:00' },
-  ],
-  Wednesday: [
-    { name: 'Hit by Night', startTime: '00:00', endTime: '04:00' },
-    { name: 'Gospel Hits', startTime: '04:00', endTime: '06:00' },
-    { name: 'Morning Jam', startTime: '06:00', endTime: '09:00' },
-    { name: 'The Playlist Hits', startTime: '09:00', endTime: '14:00' },
-    { name: 'NextGen Vibes', startTime: '14:00', endTime: '16:00' },
-    { name: 'Hit Sou Hit', startTime: '16:00', endTime: '20:00' },
-    { name: 'Dominik Show', startTime: '20:00', endTime: '22:00' },
-    { name: 'Hit Sou Hit', startTime: '22:00', endTime: '24:00' },
-  ],
-  Thursday: [
-    { name: 'Hit by Night', startTime: '00:00', endTime: '04:00' },
-    { name: 'Gospel Hits', startTime: '04:00', endTime: '06:00' },
-    { name: 'Morning Jam', startTime: '06:00', endTime: '09:00' },
-    { name: 'The Playlist Hits', startTime: '09:00', endTime: '14:00' },
-    { name: 'NextGen Vibes', startTime: '14:00', endTime: '16:00' },
-    { name: 'Hit Sou Hit', startTime: '16:00', endTime: '20:00' },
-    { name: 'Dominik Show', startTime: '20:00', endTime: '22:00' },
-    { name: 'Hit Sou Hit', startTime: '22:00', endTime: '24:00' },
-  ],
-  Friday: [
-    { name: 'Hit by Night', startTime: '00:00', endTime: '04:00' },
-    { name: 'Gospel Hits', startTime: '04:00', endTime: '06:00' },
-    { name: 'Morning Jam', startTime: '06:00', endTime: '09:00' },
-    { name: 'The Playlist Hits', startTime: '09:00', endTime: '14:00' },
-    { name: 'NextGen Vibes', startTime: '14:00', endTime: '16:00' },
-    { name: 'Hit Sou Hit', startTime: '16:00', endTime: '20:00' },
-    { name: 'Dominik Show', startTime: '20:00', endTime: '22:00' },
-    { name: 'Hit Sou Hit', startTime: '22:00', endTime: '24:00' },
-  ],
-  Saturday: [
-    { name: 'Hit by Night', startTime: '00:00', endTime: '04:00' },
-    { name: 'Gospel Hits', startTime: '04:00', endTime: '07:00' },
-    { name: 'Morning Jam', startTime: '07:00', endTime: '09:00' },
-    { name: 'Hit Sou Hit', startTime: '09:00', endTime: '19:00' },
-    { name: 'Saturday Night Fever', startTime: '19:00', endTime: '24:00' },
-  ],
-  Sunday: [
-    { name: 'Hit by Night', startTime: '00:00', endTime: '04:00' },
-    { name: 'Gospel Hits', startTime: '04:00', endTime: '07:00' },
-    { name: 'Morning Jam', startTime: '07:00', endTime: '09:00' },
-    { name: 'Hit Sou Hit', startTime: '09:00', endTime: '17:00' },
-    { name: 'Retro Hits', startTime: '17:00', endTime: '24:00' },
-  ],
-};
+interface WordPressScheduleItem {
+  id: number;
+  title: { rendered: string };
+  acf?: {
+    day?: string;
+    start_time?: string;
+    end_time?: string;
+    show_title?: string;
+    sort_order?: number;
+  };
+  _embedded?: {
+    'wp:featuredmedia'?: Array<{
+      source_url?: string;
+    }>;
+  };
+}
 
-// Function to get current and next shows
-const getCurrentAndNextShows = (): { currentShow: Show | null; nextShow: Show | null } => {
+// Function to get current and next shows from WordPress schedule
+const getCurrentAndNextShows = (schedule: Schedule): { currentShow: Show | null; nextShow: Show | null } => {
   const now = new Date();
   const dayIndex = now.getDay(); // 0 (Sunday) to 6 (Saturday)
   const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   const today = days[dayIndex];
-  const todaysSchedule = SCHEDULE[today];
+  const todaysSchedule = schedule[today];
 
   const currentHour = now.getHours();
   const currentMinute = now.getMinutes();
@@ -221,7 +173,7 @@ const getCurrentAndNextShows = (): { currentShow: Show | null; nextShow: Show | 
   if (!nextShow) {
     let nextDayIndex = (dayIndex + 1) % 7;
     let nextDay = days[nextDayIndex];
-    let nextDaySchedule = SCHEDULE[nextDay];
+    let nextDaySchedule = schedule[nextDay];
 
     if (nextDaySchedule && nextDaySchedule.length > 0) {
       nextShow = nextDaySchedule[0];
@@ -244,6 +196,7 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(false);
   const [currentShow, setCurrentShow] = useState<Show | null>(null);
   const [nextShow, setNextShow] = useState<Show | null>(null);
+  const [schedule, setSchedule] = useState<Schedule>({});
   
   // Preview sections state
   const [previewEvents, setPreviewEvents] = useState<PreviewEvent[]>([]);
@@ -284,12 +237,90 @@ export default function HomeScreen() {
     }
   }, [isPlaying]);
 
+  // Fetch schedule from WordPress
+  const fetchSchedule = useCallback(async () => {
+    console.log('[Home] Fetching schedule from WordPress...');
+    try {
+      const response = await fetch(WORDPRESS_SCHEDULE_URL);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const data: WordPressScheduleItem[] = await response.json();
+      console.log(`[Home] Fetched ${data.length} schedule items from WordPress`);
+
+      // Parse and transform data
+      const shows: Show[] = data.map((item) => {
+        const acf = item.acf || {};
+        const showTitle = acf.show_title || item.title.rendered || 'Untitled Show';
+        const decodedTitle = decodeHtmlEntities(showTitle);
+        const startTime = acf.start_time || '00:00';
+        const endTime = acf.end_time || '00:00';
+        const dayRaw = acf.day || 'unknown';
+        const dayLowercase = dayRaw.toLowerCase().trim();
+
+        // Extract featured image
+        let imageUrl: string | null = null;
+        if (item._embedded?.['wp:featuredmedia']?.[0]?.source_url) {
+          imageUrl = item._embedded['wp:featuredmedia'][0].source_url;
+        }
+
+        // Capitalize day name
+        const dayMap: { [key: string]: string } = {
+          monday: 'Monday',
+          tuesday: 'Tuesday',
+          wednesday: 'Wednesday',
+          thursday: 'Thursday',
+          friday: 'Friday',
+          saturday: 'Saturday',
+          sunday: 'Sunday',
+        };
+        const dayCapitalized = dayMap[dayLowercase] || dayLowercase;
+
+        return {
+          id: item.id,
+          name: decodedTitle,
+          startTime,
+          endTime,
+          imageUrl,
+          day: dayCapitalized,
+          sortOrder: acf.sort_order !== undefined ? acf.sort_order : 9999,
+        };
+      });
+
+      // Group by day
+      const grouped: Schedule = {};
+      shows.forEach((show: any) => {
+        if (!grouped[show.day]) {
+          grouped[show.day] = [];
+        }
+        grouped[show.day].push(show);
+      });
+
+      // Sort shows within each day
+      Object.keys(grouped).forEach((day) => {
+        grouped[day].sort((a: any, b: any) => {
+          // Primary: sort_order ascending
+          if (a.sortOrder !== b.sortOrder) {
+            return a.sortOrder - b.sortOrder;
+          }
+          // Fallback: start_time ascending (string compare)
+          return a.startTime.localeCompare(b.startTime);
+        });
+      });
+
+      setSchedule(grouped);
+      console.log('[Home] Schedule loaded successfully');
+    } catch (error) {
+      console.error('[Home] Error fetching schedule:', error);
+    }
+  }, []);
+
   const updateShows = useCallback(() => {
-    const { currentShow: current, nextShow: next } = getCurrentAndNextShows();
+    const { currentShow: current, nextShow: next } = getCurrentAndNextShows(schedule);
     console.log('[Home] Updated shows - Current:', current?.name, 'Next:', next?.name);
     setCurrentShow(current);
     setNextShow(next);
-  }, []);
+  }, [schedule]);
 
   const startMetadataPolling = useCallback(() => {
     console.log('[Home] Starting metadata polling');
@@ -427,16 +458,29 @@ export default function HomeScreen() {
       stopMetadataPolling();
     }
 
-    updateShows();
-    showUpdateInterval.current = setInterval(updateShows, 60000);
-
     return () => {
       stopMetadataPolling();
-      if (showUpdateInterval.current) {
-        clearInterval(showUpdateInterval.current);
-      }
     };
-  }, [isPlaying, startMetadataPolling, stopMetadataPolling, updateShows, fetchMetadata]);
+  }, [isPlaying, startMetadataPolling, stopMetadataPolling, fetchMetadata]);
+
+  // Fetch schedule on mount
+  useEffect(() => {
+    fetchSchedule();
+  }, [fetchSchedule]);
+
+  // Update shows when schedule changes
+  useEffect(() => {
+    if (Object.keys(schedule).length > 0) {
+      updateShows();
+      showUpdateInterval.current = setInterval(updateShows, 60000);
+
+      return () => {
+        if (showUpdateInterval.current) {
+          clearInterval(showUpdateInterval.current);
+        }
+      };
+    }
+  }, [schedule, updateShows]);
 
   // Fetch preview data on mount
   useEffect(() => {
@@ -588,68 +632,108 @@ export default function HomeScreen() {
             </Text>
           </TouchableOpacity>
 
+          {/* UPDATED CURRENT SHOW AND NEXT SHOW CARDS */}
           <View style={styles.showCardsContainer}>
+            {/* ON AIR NOW CARD */}
             <View style={styles.showCard}>
-              <View style={styles.showCardHeader}>
-                <IconSymbol
-                  ios_icon_name="radio"
-                  android_material_icon_name="radio"
-                  size={20}
-                  color="#FFD700"
-                />
-                <Text style={styles.showCardLabel}>CURRENT SHOW</Text>
+              <View style={styles.showCardTop}>
+                <View style={styles.onAirBadge}>
+                  <View style={styles.onAirDot} />
+                  <Text style={styles.onAirText}>ON AIR NOW</Text>
+                </View>
               </View>
               {currentShow ? (
-                <React.Fragment>
-                  <Text style={styles.showName} numberOfLines={2}>
-                    {currentShow.name}
-                  </Text>
-                  <View style={styles.showTimeContainer}>
-                    <IconSymbol
-                      ios_icon_name="clock"
-                      android_material_icon_name="access-time"
-                      size={14}
-                      color="#B8B8B8"
+                <View style={styles.showCardContent}>
+                  {currentShow.imageUrl ? (
+                    <Image
+                      source={resolveImageSource(currentShow.imageUrl)}
+                      style={styles.showThumbnail}
+                      resizeMode="cover"
                     />
-                    <Text style={styles.showTime}>
+                  ) : (
+                    <View style={styles.showThumbnailPlaceholder}>
+                      <IconSymbol
+                        ios_icon_name="music.note"
+                        android_material_icon_name="music-note"
+                        size={20}
+                        color="#FFD700"
+                      />
+                    </View>
+                  )}
+                  <View style={styles.showTextContainer}>
+                    <Text style={styles.showTitle} numberOfLines={1}>
+                      {currentShow.name}
+                    </Text>
+                    <Text style={styles.showTimeRange}>
                       {currentShow.startTime}–{currentShow.endTime}
                     </Text>
                   </View>
-                </React.Fragment>
+                </View>
               ) : (
-                <Text style={styles.noShowText}>No show scheduled</Text>
+                <View style={styles.showCardContent}>
+                  <View style={styles.showThumbnailPlaceholder}>
+                    <IconSymbol
+                      ios_icon_name="music.note"
+                      android_material_icon_name="music-note"
+                      size={20}
+                      color="rgba(255, 215, 0, 0.3)"
+                    />
+                  </View>
+                  <View style={styles.showTextContainer}>
+                    <Text style={styles.noShowText}>No show scheduled</Text>
+                  </View>
+                </View>
               )}
             </View>
 
+            {/* UP NEXT CARD */}
             <View style={styles.showCard}>
-              <View style={styles.showCardHeader}>
-                <IconSymbol
-                  ios_icon_name="clock.arrow.circlepath"
-                  android_material_icon_name="schedule"
-                  size={20}
-                  color="#FFD700"
-                />
-                <Text style={styles.showCardLabel}>NEXT SHOW</Text>
+              <View style={styles.showCardTop}>
+                <View style={styles.upNextBadge}>
+                  <Text style={styles.upNextText}>UP NEXT</Text>
+                </View>
               </View>
               {nextShow ? (
-                <React.Fragment>
-                  <Text style={styles.showName} numberOfLines={2}>
-                    {nextShow.name}
-                  </Text>
-                  <View style={styles.showTimeContainer}>
-                    <IconSymbol
-                      ios_icon_name="clock"
-                      android_material_icon_name="access-time"
-                      size={14}
-                      color="#B8B8B8"
+                <View style={styles.showCardContent}>
+                  {nextShow.imageUrl ? (
+                    <Image
+                      source={resolveImageSource(nextShow.imageUrl)}
+                      style={styles.showThumbnail}
+                      resizeMode="cover"
                     />
-                    <Text style={styles.showTime}>
+                  ) : (
+                    <View style={styles.showThumbnailPlaceholder}>
+                      <IconSymbol
+                        ios_icon_name="music.note"
+                        android_material_icon_name="music-note"
+                        size={20}
+                        color="#FFD700"
+                      />
+                    </View>
+                  )}
+                  <View style={styles.showTextContainer}>
+                    <Text style={styles.showTitle} numberOfLines={1}>
+                      {nextShow.name}
+                    </Text>
+                    <Text style={styles.showTimeRange}>
                       {nextShow.startTime}–{nextShow.endTime}
                     </Text>
                   </View>
-                </React.Fragment>
+                </View>
               ) : (
-                <Text style={styles.noShowText}>No show scheduled</Text>
+                <View style={styles.showCardContent}>
+                  <View style={styles.showThumbnailPlaceholder}>
+                    <IconSymbol
+                      ios_icon_name="music.note"
+                      android_material_icon_name="music-note"
+                      size={20}
+                      color="rgba(255, 215, 0, 0.3)"
+                    />
+                  </View>
+                  <View style={styles.showTextContainer}>
+                    <Text style={styles.noShowText}>No show scheduled</Text>
+                  </View>
+                </View>
               )}
             </View>
           </View>
@@ -970,6 +1054,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginLeft: 10,
   },
+  // UPDATED SHOW CARDS STYLES
   showCardsContainer: {
     flexDirection: 'row',
     gap: 12,
@@ -978,47 +1063,90 @@ const styles = StyleSheet.create({
   showCard: {
     flex: 1,
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 15,
-    padding: 16,
+    borderRadius: 16,
+    padding: 14,
     borderWidth: 1,
     borderColor: 'rgba(255, 215, 0, 0.2)',
-    minHeight: 120,
+    minHeight: 110,
   },
-  showCardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  showCardTop: {
     marginBottom: 12,
-    gap: 6,
   },
-  showCardLabel: {
-    color: '#FFD700',
-    fontSize: 10,
-    fontWeight: 'bold',
-    letterSpacing: 1,
-  },
-  showName: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 8,
-    lineHeight: 20,
-  },
-  showTimeContainer: {
+  onAirBadge: {
     flexDirection: 'row',
     alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(0, 255, 0, 0.2)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
     gap: 4,
   },
-  showTime: {
+  onAirDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#00FF00',
+  },
+  onAirText: {
+    color: '#00FF00',
+    fontSize: 10,
+    fontWeight: 'bold',
+    letterSpacing: 0.8,
+  },
+  upNextBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(184, 184, 184, 0.2)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  upNextText: {
     color: '#B8B8B8',
-    fontSize: 13,
-    fontWeight: '600',
+    fontSize: 10,
+    fontWeight: 'bold',
+    letterSpacing: 0.8,
+  },
+  showCardContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  showThumbnail: {
+    width: 44,
+    height: 44,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  showThumbnailPlaceholder: {
+    width: 44,
+    height: 44,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  showTextContainer: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  showTitle: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  showTimeRange: {
+    color: '#B8B8B8',
+    fontSize: 12,
+    fontWeight: '500',
   },
   noShowText: {
     color: '#888888',
-    fontSize: 14,
+    fontSize: 13,
     fontStyle: 'italic',
   },
-  // NEW PREVIEW SECTION STYLES
+  // PREVIEW SECTION STYLES (unchanged)
   previewSection: {
     marginBottom: 30,
   },
