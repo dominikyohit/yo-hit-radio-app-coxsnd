@@ -632,108 +632,108 @@ export default function HomeScreen() {
             </Text>
           </TouchableOpacity>
 
-          {/* UPDATED CURRENT SHOW AND NEXT SHOW CARDS */}
+          {/* UPDATED CURRENT SHOW AND NEXT SHOW CARDS - MATCHING EVENT/NEWS/RELEASE STYLE */}
           <View style={styles.showCardsContainer}>
             {/* ON AIR NOW CARD */}
             <View style={styles.showCard}>
-              <View style={styles.showCardHeader}>
+              <View style={styles.showCardBadgeContainer}>
                 <View style={styles.onAirBadge}>
                   <View style={styles.onAirDot} />
                   <Text style={styles.onAirText}>ON AIR NOW</Text>
                 </View>
               </View>
               {currentShow ? (
-                <View style={styles.showCardContent}>
+                <>
                   {currentShow.imageUrl ? (
                     <Image
                       source={resolveImageSource(currentShow.imageUrl)}
-                      style={styles.showThumbnail}
+                      style={styles.showCardImage}
                       resizeMode="cover"
                     />
                   ) : (
-                    <View style={styles.showThumbnailPlaceholder}>
+                    <View style={styles.showCardImagePlaceholder}>
                       <IconSymbol
                         ios_icon_name="music.note"
                         android_material_icon_name="music-note"
-                        size={20}
-                        color="#FFD700"
+                        size={32}
+                        color="rgba(255, 215, 0, 0.3)"
                       />
                     </View>
                   )}
-                  <View style={styles.showTextContainer}>
-                    <Text style={styles.showTitle} numberOfLines={1}>
+                  <View style={styles.showCardTextContent}>
+                    <Text style={styles.showCardTitle} numberOfLines={2}>
                       {currentShow.name}
                     </Text>
-                    <Text style={styles.showTimeRange}>
+                    <Text style={styles.showCardTime}>
                       {currentShow.startTime}–{currentShow.endTime}
                     </Text>
                   </View>
-                </View>
+                </>
               ) : (
-                <View style={styles.showCardContent}>
-                  <View style={styles.showThumbnailPlaceholder}>
+                <>
+                  <View style={styles.showCardImagePlaceholder}>
                     <IconSymbol
                       ios_icon_name="music.note"
                       android_material_icon_name="music-note"
-                      size={20}
-                      color="rgba(255, 215, 0, 0.3)"
+                      size={32}
+                      color="rgba(255, 215, 0, 0.2)"
                     />
                   </View>
-                  <View style={styles.showTextContainer}>
-                    <Text style={styles.noShowText}>No show scheduled</Text>
+                  <View style={styles.showCardTextContent}>
+                    <Text style={styles.showCardNoShow}>No show scheduled</Text>
                   </View>
-                </View>
+                </>
               )}
             </View>
 
             {/* UP NEXT CARD */}
             <View style={styles.showCard}>
-              <View style={styles.showCardHeader}>
+              <View style={styles.showCardBadgeContainer}>
                 <View style={styles.upNextBadge}>
                   <Text style={styles.upNextText}>UP NEXT</Text>
                 </View>
               </View>
               {nextShow ? (
-                <View style={styles.showCardContent}>
+                <>
                   {nextShow.imageUrl ? (
                     <Image
                       source={resolveImageSource(nextShow.imageUrl)}
-                      style={styles.showThumbnail}
+                      style={styles.showCardImage}
                       resizeMode="cover"
                     />
                   ) : (
-                    <View style={styles.showThumbnailPlaceholder}>
+                    <View style={styles.showCardImagePlaceholder}>
                       <IconSymbol
                         ios_icon_name="music.note"
                         android_material_icon_name="music-note"
-                        size={20}
-                        color="#FFD700"
+                        size={32}
+                        color="rgba(255, 215, 0, 0.3)"
                       />
                     </View>
                   )}
-                  <View style={styles.showTextContainer}>
-                    <Text style={styles.showTitle} numberOfLines={1}>
+                  <View style={styles.showCardTextContent}>
+                    <Text style={styles.showCardTitle} numberOfLines={2}>
                       {nextShow.name}
                     </Text>
-                    <Text style={styles.showTimeRange}>
+                    <Text style={styles.showCardTime}>
                       {nextShow.startTime}–{nextShow.endTime}
                     </Text>
                   </View>
-                </View>
+                </>
               ) : (
-                <View style={styles.showCardContent}>
-                  <View style={styles.showThumbnailPlaceholder}>
+                <>
+                  <View style={styles.showCardImagePlaceholder}>
                     <IconSymbol
                       ios_icon_name="music.note"
                       android_material_icon_name="music-note"
-                      size={20}
-                      color="rgba(255, 215, 0, 0.3)"
+                      size={32}
+                      color="rgba(255, 215, 0, 0.2)"
                     />
                   </View>
-                  <View style={styles.showTextContainer}>
-                    <Text style={styles.noShowText}>No show scheduled</Text>
+                  <View style={styles.showCardTextContent}>
+                    <Text style={styles.showCardNoShow}>No show scheduled</Text>
                   </View>
-                </View>
+                </>
               )}
             </View>
           </View>
@@ -1054,7 +1054,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginLeft: 10,
   },
-  // UPDATED SHOW CARDS STYLES
+  // UPDATED SHOW CARDS STYLES - MATCHING EVENT/NEWS/RELEASE CARD STYLE
   showCardsContainer: {
     flexDirection: 'row',
     gap: 12,
@@ -1062,14 +1062,15 @@ const styles = StyleSheet.create({
   },
   showCard: {
     flex: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
     borderRadius: 16,
-    padding: 12,
+    overflow: 'hidden',
     borderWidth: 1,
-    borderColor: 'rgba(255, 215, 0, 0.15)',
+    borderColor: 'rgba(255, 215, 0, 0.2)',
   },
-  showCardHeader: {
-    marginBottom: 10,
+  showCardBadgeContainer: {
+    padding: 10,
+    paddingBottom: 8,
   },
   onAirBadge: {
     flexDirection: 'row',
@@ -1078,7 +1079,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 255, 0, 0.15)',
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 6,
+    borderRadius: 8,
     gap: 5,
   },
   onAirDot: {
@@ -1095,55 +1096,49 @@ const styles = StyleSheet.create({
   },
   upNextBadge: {
     alignSelf: 'flex-start',
-    backgroundColor: 'rgba(184, 184, 184, 0.15)',
+    backgroundColor: 'rgba(138, 43, 226, 0.2)',
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 6,
+    borderRadius: 8,
   },
   upNextText: {
-    color: '#B8B8B8',
+    color: '#B19CD9',
     fontSize: 10,
     fontWeight: 'bold',
     letterSpacing: 1,
   },
-  showCardContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  showThumbnail: {
-    width: 44,
-    height: 44,
-    borderRadius: 8,
+  showCardImage: {
+    width: '100%',
+    height: 75,
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
   },
-  showThumbnailPlaceholder: {
-    width: 44,
-    height: 44,
-    borderRadius: 8,
+  showCardImagePlaceholder: {
+    width: '100%',
+    height: 75,
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 1,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
     borderColor: 'rgba(255, 215, 0, 0.1)',
   },
-  showTextContainer: {
-    flex: 1,
-    justifyContent: 'center',
+  showCardTextContent: {
+    padding: 12,
+    paddingTop: 10,
   },
-  showTitle: {
+  showCardTitle: {
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: 'bold',
-    marginBottom: 3,
+    marginBottom: 4,
     lineHeight: 18,
   },
-  showTimeRange: {
+  showCardTime: {
     color: '#B8B8B8',
     fontSize: 12,
     fontWeight: '500',
   },
-  noShowText: {
+  showCardNoShow: {
     color: '#888888',
     fontSize: 13,
     fontStyle: 'italic',
