@@ -23,7 +23,7 @@ import Animated, {
   Easing,
 } from 'react-native-reanimated';
 import AudioManager from '@/utils/audioManager';
-import { fetchLiveMetadata, LiveMetadata } from '@/utils/metadataService';
+import { getZenoMetadata, ZenoMetadata } from '@/utils/zenoMetadata';
 
 const STREAM_URL = 'https://stream.zeno.fm/hmc38shnrwzuv';
 const METADATA_POLL_INTERVAL = 12000; // 12 seconds
@@ -161,7 +161,7 @@ const getCurrentAndNextShows = (): { currentShow: Show | null; nextShow: Show | 
 
 export default function HomeScreen() {
   const [isPlaying, setIsPlaying] = useState(false);
-  const [metadata, setMetadata] = useState<LiveMetadata | null>(null);
+  const [metadata, setMetadata] = useState<ZenoMetadata | null>(null);
   const [loading, setLoading] = useState(false);
   const [currentShow, setCurrentShow] = useState<Show | null>(null);
   const [nextShow, setNextShow] = useState<Show | null>(null);
@@ -190,7 +190,7 @@ export default function HomeScreen() {
   const fetchMetadata = useCallback(async () => {
     console.log('[Home] Fetching metadata... (isPlaying:', isPlaying, ')');
     try {
-      const data = await fetchLiveMetadata();
+      const data = await getZenoMetadata();
       console.log('[Home] Fetched metadata:', data);
       setMetadata(data);
     } catch (error) {
@@ -250,8 +250,8 @@ export default function HomeScreen() {
         console.log('[Home] User tapped Listen Live button');
         setLoading(true);
         
-        const title = metadata?.title || 'Yo Hit Radio – Live Stream';
-        const artist = metadata?.artist || 'Live Stream';
+        const title = metadata?.displayTitle || 'Yo Hit Radio – Live Stream';
+        const artist = metadata?.displayArtist || 'Live Stream';
         
         await audioManager.playAudio(STREAM_URL, true, title, artist);
         setIsPlaying(true);
@@ -266,16 +266,9 @@ export default function HomeScreen() {
   };
 
   // Parse metadata with proper fallbacks
-  const displayTitle = metadata?.title && metadata.title.trim() !== '' 
-    ? metadata.title 
-    : 'Live Stream';
-  const displayArtist = metadata?.artist && metadata.artist.trim() !== '' 
-    ? metadata.artist 
-    : 'Yo Hit Radio';
-  const displayArtwork = metadata?.artwork;
-  
-  // 🚨 DEBUG: Prepare metadata JSON string for display
-  const metadataDebugString = JSON.stringify(metadata);
+  const displayTitle = metadata?.displayTitle || 'Live Stream';
+  const displayArtist = metadata?.displayArtist || 'Yo Hit Radio';
+  const displayArtwork = metadata?.coverImage;
 
   return (
     <LinearGradient colors={['#1a0033', '#330066', '#1a0033']} style={styles.gradient}>
@@ -319,10 +312,6 @@ export default function HomeScreen() {
             </Text>
             <Text style={styles.artistName} numberOfLines={2}>
               {displayArtist}
-            </Text>
-            
-            <Text style={styles.debugText}>
-              DEBUG: {metadataDebugString}
             </Text>
           </View>
 
@@ -501,13 +490,6 @@ const styles = StyleSheet.create({
     color: '#CCCCCC',
     fontSize: 14,
     textAlign: 'center',
-    marginBottom: 10,
-  },
-  debugText: {
-    color: 'white',
-    fontSize: 10,
-    textAlign: 'center',
-    marginTop: 10,
   },
   listenLiveButton: {
     backgroundColor: '#FFD700',

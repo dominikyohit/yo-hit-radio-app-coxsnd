@@ -2,31 +2,31 @@
 /**
  * Zeno Radio Metadata Fetcher
  * 
- * Fetches live "Now Playing" metadata from Zeno Radio's official API
+ * Fetches live "Now Playing" metadata from Zeno Radio's official Metadata API
  * 
  * CONFIGURATION:
- * Station ID: hmc38shnrwzuv
+ * Station Mount: hmc38shnrwzuv
  * Stream URL: https://stream.zeno.fm/hmc38shnrwzuv
- * Metadata API: https://zenoplay.zeno.fm/api/nowplaying/hmc38shnrwzuv
+ * Metadata API: https://api.zeno.fm/mounts/metadata/subscribe/hmc38shnrwzuv
  */
 
-// Station ID from stream URL
-const ZENO_STATION_ID = 'hmc38shnrwzuv';
+// Station mount ID
+const ZENO_MOUNT_ID = 'hmc38shnrwzuv';
 
 export interface ZenoMetadata {
   displayTitle: string;
   displayArtist: string;
-  coverImage: string;
+  coverImage: string | null;
 }
 
 /**
- * Fetch current track metadata from Zeno Radio's official now playing API
+ * Fetch current track metadata from Zeno Radio's official Metadata API
  * Returns displayTitle, displayArtist, and coverImage for the NOW PLAYING card
  */
 export const getZenoMetadata = async (): Promise<ZenoMetadata> => {
-  console.log('[Zeno Metadata] Fetching now playing info for station:', ZENO_STATION_ID);
+  console.log('[Zeno Metadata] Fetching metadata for mount:', ZENO_MOUNT_ID);
   
-  const url = `https://zenoplay.zeno.fm/api/nowplaying/${ZENO_STATION_ID}`;
+  const url = `https://api.zeno.fm/mounts/metadata/subscribe/${ZENO_MOUNT_ID}`;
   
   try {
     console.log('[Zeno Metadata] Calling API:', url);
@@ -34,7 +34,7 @@ export const getZenoMetadata = async (): Promise<ZenoMetadata> => {
     const response = await fetch(url, {
       method: 'GET',
       headers: {
-        'Accept': 'application/json',
+        'Accept': 'application/json, text/event-stream',
       },
     });
 
@@ -45,15 +45,35 @@ export const getZenoMetadata = async (): Promise<ZenoMetadata> => {
       return getFallbackMetadata();
     }
 
-    const data = await response.json();
+    const text = await response.text();
+    console.log('[Zeno Metadata] Raw response (first 500 chars):', text.substring(0, 500));
+
+    // Parse the response - could be JSON or event-stream format
+    let rawData: any;
     
-    // 🚨 DEBUG: Log the raw response from Zeno API
-    console.log("ZENO RAW RESPONSE =", JSON.stringify(data, null, 2));
+    if (text.startsWith('data:')) {
+      // Event-stream format: extract the last "data:" line
+      const dataLines = text.split('\n').filter(line => line.startsWith('data:'));
+      if (dataLines.length > 0) {
+        const lastDataLine = dataLines[dataLines.length - 1];
+        const jsonString = lastDataLine.substring(5).trim(); // Remove "data: " prefix
+        console.log('[Zeno Metadata] Extracted JSON from event-stream:', jsonString);
+        rawData = JSON.parse(jsonString);
+      } else {
+        console.log('[Zeno Metadata] No data lines found in event-stream');
+        return getFallbackMetadata();
+      }
+    } else {
+      // Direct JSON response
+      rawData = JSON.parse(text);
+    }
+
+    console.log('[Zeno Metadata] Parsed raw data:', JSON.stringify(rawData, null, 2));
 
     // Parse the response and map to our display format
-    const metadata = parseZenoNowPlaying(data);
+    const metadata = parseZenoMetadata(rawData);
     
-    console.log('[Zeno Metadata] ✅ Parsed metadata:', metadata);
+    console.log('[Zeno Metadata] ✅ Final metadata:', metadata);
     return metadata;
     
   } catch (error) {
@@ -63,11 +83,11 @@ export const getZenoMetadata = async (): Promise<ZenoMetadata> => {
 };
 
 /**
- * Parse Zeno's now playing API response
+ * Parse Zeno's metadata API response
  * Maps API fields to displayTitle, displayArtist, and coverImage
  */
-function parseZenoNowPlaying(data: any): ZenoMetadata {
-  console.log('[Zeno Metadata] Parsing now playing data...');
+function parseZenoMetadata(data: any): ZenoMetadata {
+  console.log('[Zeno Metadata] Parsing metadata...');
 
   if (!data) {
     console.log('[Zeno Metadata] Data is null/undefined');
@@ -75,19 +95,28 @@ function parseZenoNowPlaying(data: any): ZenoMetadata {
   }
 
   // Extract fields from Zeno API response
-  // Common field names: title, artist, artwork, cover, image, album_art
+  // The response may have nested "data" object or direct fields
+  const metadataObj = data.data || data;
+
   let title = '';
   let artist = '';
-  let artwork = '';
+  let artwork: string | null = null;
 
-  // Try to find title
-  title = data.title || data.song || data.track || data.name || '';
+  // Try to find title (common field names)
+  title = metadataObj.title || metadataObj.song || metadataObj.track || metadataObj.name || '';
   
   // Try to find artist
-  artist = data.artist || data.performer || '';
+  artist = metadataObj.artist || metadataObj.performer || '';
   
   // Try to find artwork/cover image
-  artwork = data.artwork || data.cover || data.image || data.album_art || data.albumArt || '';
+  const artworkField = metadataObj.artwork || metadataObj.cover || metadataObj.image || 
+                       metadataObj.album_art || metadataObj.albumArt || metadataObj.cover_url || 
+                       metadataObj.coverUrl || '';
+  
+  // Validate artwork is a valid URL
+  if (artworkField && typeof artworkField === 'string' && artworkField.startsWith('http')) {
+    artwork = artworkField;
+  }
 
   console.log('[Zeno Metadata] Extracted fields:', { title, artist, artwork });
 
@@ -103,9 +132,9 @@ function parseZenoNowPlaying(data: any): ZenoMetadata {
 
   // Return mapped metadata with fallbacks
   return {
-    displayTitle: title || 'Live Stream',
-    displayArtist: artist || 'Yo Hit Radio',
-    coverImage: artwork || '',
+    displayTitle: title && title.trim() !== '' ? title : 'Live Stream',
+    displayArtist: artist && artist.trim() !== '' ? artist : 'Yo Hit Radio',
+    coverImage: artwork,
   };
 }
 
@@ -116,6 +145,6 @@ function getFallbackMetadata(): ZenoMetadata {
   return {
     displayTitle: 'Live Stream',
     displayArtist: 'Yo Hit Radio',
-    coverImage: '',
+    coverImage: null,
   };
 }
