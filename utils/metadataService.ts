@@ -11,6 +11,7 @@ const METADATA_ENDPOINT = `${BACKEND_URL}/api/metadata/live`;
 export interface LiveMetadata {
   artist: string;
   title: string;
+  artwork?: string;
   raw: string;
 }
 
@@ -19,6 +20,8 @@ export interface LiveMetadata {
  */
 export async function fetchLiveMetadata(): Promise<LiveMetadata> {
   try {
+    console.log('[MetadataService] Fetching from:', METADATA_ENDPOINT);
+    
     const response = await fetch(METADATA_ENDPOINT, {
       method: 'GET',
       headers: {
@@ -27,17 +30,30 @@ export async function fetchLiveMetadata(): Promise<LiveMetadata> {
     });
 
     if (!response.ok) {
+      console.error('[MetadataService] HTTP error:', response.status);
       throw new Error(`HTTP ${response.status}`);
     }
 
     const data = await response.json();
-    return {
+    console.log('[MetadataService] Received data:', data);
+    
+    // Parse the metadata fields
+    const result: LiveMetadata = {
       artist: data.artist || '',
       title: data.title || '',
-      raw: data.raw || '',
+      artwork: data.artwork || data.cover_url || data.coverUrl || undefined,
+      raw: data.raw || JSON.stringify(data),
     };
+    
+    console.log('[MetadataService] Parsed result:', result);
+    
+    return result;
   } catch (error) {
-    console.error('Error fetching metadata:', error);
-    return { artist: '', title: '', raw: '' };
+    console.error('[MetadataService] Error fetching metadata:', error);
+    return { 
+      artist: '', 
+      title: '', 
+      raw: `Error: ${error}` 
+    };
   }
 }
