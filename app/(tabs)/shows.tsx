@@ -45,17 +45,24 @@ interface WordPressScheduleItem {
 
 interface Show {
   id: number;
+  day: string; // lowercase day name (e.g., "monday")
   title: string;
-  startTime: string;
-  endTime: string;
+  startTime: string; // "HH:mm"
+  endTime: string; // "HH:mm"
   timeRange: string;
   imageUrl: string | null;
   sortOrder: number;
 }
 
 interface DaySchedule {
-  day: string;
+  day: string; // Capitalized day name (e.g., "Monday")
   shows: Show[];
+}
+
+interface LiveShowInfo {
+  onAirShowId: number | null;
+  upNextShowId: number | null;
+  upNextDay: string | null; // lowercase day name
 }
 
 // Day order for grouping
@@ -66,6 +73,11 @@ export default function ShowsScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [currentLiveInfo, setCurrentLiveInfo] = useState<LiveShowInfo>({
+    onAirShowId: null,
+    upNextShowId: null,
+    upNextDay: null,
+  });
 
   const fetchSchedule = useCallback(async () => {
     console.log('Fetching schedule from WordPress...');
@@ -86,6 +98,8 @@ export default function ShowsScreen() {
         const endTime = acf.end_time || '00:00';
         const timeRange = `${startTime} - ${endTime}`;
         const sortOrder = acf.sort_order !== undefined ? acf.sort_order : 9999;
+        const dayRaw = acf.day || 'unknown';
+        const dayLowercase = dayRaw.toLowerCase().trim();
 
         // Extract featured image
         let imageUrl: string | null = null;
@@ -95,6 +109,7 @@ export default function ShowsScreen() {
 
         return {
           id: item.id,
+          day: dayLowercase,
           title: decodedTitle,
           startTime,
           endTime,
@@ -107,12 +122,11 @@ export default function ShowsScreen() {
       // Group by day
       const grouped: { [key: string]: Show[] } = {};
       shows.forEach((show) => {
-        const dayRaw = show.id ? data.find(d => d.id === show.id)?.acf?.day : undefined;
-        const day = dayRaw ? capitalizeDay(dayRaw) : 'Unknown';
-        if (!grouped[day]) {
-          grouped[day] = [];
+        const dayCapitalized = capitalizeDay(show.day);
+        if (!grouped[dayCapitalized]) {
+          grouped[dayCapitalized] = [];
         }
-        grouped[day].push(show);
+        grouped[dayCapitalized].push(show);
       });
 
       // Sort shows within each day
@@ -145,6 +159,85 @@ export default function ShowsScreen() {
       setRefreshing(false);
     }
   }, []);
+
+  // Determine ON AIR NOW and UP NEXT shows
+  const getLiveShowInfo = useCallback((scheduleData: DaySchedule[]): LiveShowInfo => {
+    const now = new Date();
+    const currentDayIndex = now.getDay(); // 0 for Sunday, 1 for Monday, etc.
+    const daysOfWeek = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+    const currentDayName = daysOfWeek[currentDayIndex];
+    const currentTimeMinutes = now.getHours() * 60 + now.getMinutes();
+
+    let onAirShowId: number | null = null;
+    let upNextShowId: number | null = null;
+    let upNextDay: string | null = null;
+
+    // Find current day's schedule
+    const currentDaySchedule = scheduleData.find(
+      (ds) => ds.day.toLowerCase() === currentDayName
+    );
+
+    if (currentDaySchedule) {
+      const shows = currentDaySchedule.shows;
+
+      for (let i = 0; i < shows.length; i++) {
+        const show = shows[i];
+        const [startH, startM] = show.startTime.split(':').map(Number);
+        const [endH, endM] = show.endTime.split(':').map(Number);
+        const showStartMinutes = startH * 60 + startM;
+        const showEndMinutes = endH * 60 + endM;
+
+        // Check if current time is within [start, end)
+        if (currentTimeMinutes >= showStartMinutes && currentTimeMinutes < showEndMinutes) {
+          onAirShowId = show.id;
+          // Next show is the one after current (if exists)
+          if (i + 1 < shows.length) {
+            upNextShowId = shows[i + 1].id;
+            upNextDay = currentDayName;
+          }
+          break;
+        } else if (currentTimeMinutes < showStartMinutes && !upNextShowId) {
+          // Current time is before this show, and we haven't found UP NEXT yet
+          upNextShowId = show.id;
+          upNextDay = currentDayName;
+        }
+      }
+    }
+
+    // Edge case: If current time is after the last show of the day, UP NEXT is first show of next day
+    if (!onAirShowId && !upNextShowId) {
+      let nextDayIndex = (currentDayIndex + 1) % 7;
+      for (let i = 0; i < 7; i++) {
+        const nextDayName = daysOfWeek[nextDayIndex];
+        const nextDaySchedule = scheduleData.find(
+          (ds) => ds.day.toLowerCase() === nextDayName
+        );
+        if (nextDaySchedule && nextDaySchedule.shows.length > 0) {
+          upNextShowId = nextDaySchedule.shows[0].id;
+          upNextDay = nextDayName;
+          break;
+        }
+        nextDayIndex = (nextDayIndex + 1) % 7;
+      }
+    }
+
+    return { onAirShowId, upNextShowId, upNextDay };
+  }, []);
+
+  // Update live info periodically
+  useEffect(() => {
+    if (schedule.length > 0) {
+      const updateLiveInfo = () => {
+        const liveInfo = getLiveShowInfo(schedule);
+        setCurrentLiveInfo(liveInfo);
+      };
+
+      updateLiveInfo(); // Initial update
+      const interval = setInterval(updateLiveInfo, 60 * 1000); // Update every minute
+
+      return () => clearInterval(interval);
+    }
+  }, [schedule, getLiveShowInfo]);
 
   useEffect(() => {
     fetchSchedule();
@@ -267,43 +360,67 @@ export default function ShowsScreen() {
                   <Text style={styles.dayTitle}>{daySchedule.day}</Text>
                 </View>
 
-                {daySchedule.shows.map((show, showIndex) => (
-                  <View key={showIndex} style={styles.showCard}>
-                    <View style={styles.showImageContainer}>
-                      {show.imageUrl ? (
-                        <Image
-                          source={resolveImageSource(show.imageUrl)}
-                          style={styles.showImage}
-                          resizeMode="cover"
-                        />
-                      ) : (
-                        <View style={styles.showImagePlaceholder}>
-                          <IconSymbol
-                            ios_icon_name="music.note"
-                            android_material_icon_name="music-note"
-                            size={28}
-                            color="#FFD700"
-                          />
-                        </View>
-                      )}
-                    </View>
+                {daySchedule.shows.map((show, showIndex) => {
+                  const isOnAir = show.id === currentLiveInfo.onAirShowId;
+                  const isUpNext = show.id === currentLiveInfo.upNextShowId;
 
-                    <View style={styles.showInfo}>
-                      <Text style={styles.showTitle} numberOfLines={2}>
-                        {show.title}
-                      </Text>
-                      <View style={styles.timeRow}>
-                        <IconSymbol
-                          ios_icon_name="clock"
-                          android_material_icon_name="access-time"
-                          size={14}
-                          color="#B8B8B8"
-                        />
-                        <Text style={styles.timeText}>{show.timeRange}</Text>
+                  return (
+                    <View
+                      key={showIndex}
+                      style={[
+                        styles.showCard,
+                        isOnAir && styles.showCardOnAir,
+                        isUpNext && styles.showCardUpNext,
+                      ]}
+                    >
+                      <View style={styles.showImageContainer}>
+                        {show.imageUrl ? (
+                          <Image
+                            source={resolveImageSource(show.imageUrl)}
+                            style={styles.showImage}
+                            resizeMode="cover"
+                          />
+                        ) : (
+                          <View style={styles.showImagePlaceholder}>
+                            <IconSymbol
+                              ios_icon_name="music.note"
+                              android_material_icon_name="music-note"
+                              size={24}
+                              color="#FFD700"
+                            />
+                          </View>
+                        )}
+                      </View>
+
+                      <View style={styles.showInfo}>
+                        <View style={styles.showTitleRow}>
+                          <Text style={styles.showTitle} numberOfLines={2}>
+                            {show.title}
+                          </Text>
+                          {isOnAir && (
+                            <View style={styles.badgeOnAir}>
+                              <Text style={styles.badgeText}>ON AIR NOW</Text>
+                            </View>
+                          )}
+                          {isUpNext && !isOnAir && (
+                            <View style={styles.badgeUpNext}>
+                              <Text style={styles.badgeText}>UP NEXT</Text>
+                            </View>
+                          )}
+                        </View>
+                        <View style={styles.timeRow}>
+                          <IconSymbol
+                            ios_icon_name="clock"
+                            android_material_icon_name="access-time"
+                            size={14}
+                            color="#B8B8B8"
+                          />
+                          <Text style={styles.timeText}>{show.timeRange}</Text>
+                        </View>
                       </View>
                     </View>
-                  </View>
-                ))}
+                  );
+                })}
               </View>
             ))
           )}
@@ -342,11 +459,11 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   daySection: {
-    marginBottom: 24,
+    marginBottom: 28,
   },
   dayHeader: {
-    marginBottom: 12,
-    paddingBottom: 8,
+    marginBottom: 14,
+    paddingBottom: 10,
     borderBottomWidth: 2,
     borderBottomColor: '#FFD700',
   },
@@ -371,10 +488,25 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
+  showCardOnAir: {
+    borderWidth: 2,
+    borderColor: '#FFD700',
+    backgroundColor: 'rgba(255, 215, 0, 0.15)',
+    shadowColor: '#FFD700',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.5,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  showCardUpNext: {
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 215, 0, 0.6)',
+    backgroundColor: 'rgba(255, 215, 0, 0.1)',
+  },
   showImageContainer: {
-    width: 66,
-    height: 66,
-    borderRadius: 14,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     overflow: 'hidden',
     backgroundColor: 'rgba(255, 255, 255, 0.06)',
     borderWidth: 1,
@@ -400,11 +532,37 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
   },
+  showTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 6,
+    gap: 8,
+  },
   showTitle: {
+    flex: 1,
     fontSize: 16,
     fontWeight: '700',
     color: '#FFFFFF',
-    marginBottom: 6,
+  },
+  badgeOnAir: {
+    backgroundColor: '#FFD700',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    alignSelf: 'flex-start',
+  },
+  badgeUpNext: {
+    backgroundColor: 'rgba(255, 215, 0, 0.7)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    alignSelf: 'flex-start',
+  },
+  badgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#1a0033',
+    letterSpacing: 0.5,
   },
   timeRow: {
     flexDirection: 'row',
