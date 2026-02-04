@@ -217,12 +217,14 @@ export default function HomeScreen() {
   }, []);
 
   useEffect(() => {
-    // Start polling metadata when component mounts
-    startMetadataPolling();
+    if (isPlaying) {
+      startMetadataPolling();
+    } else {
+      stopMetadataPolling();
+    }
 
-    // Update shows immediately and then every minute
     updateShows();
-    showUpdateInterval.current = setInterval(updateShows, 60000); // Update every minute
+    showUpdateInterval.current = setInterval(updateShows, 60000);
 
     return () => {
       stopMetadataPolling();
@@ -230,21 +232,18 @@ export default function HomeScreen() {
         clearInterval(showUpdateInterval.current);
       }
     };
-  }, [startMetadataPolling, stopMetadataPolling, updateShows]);
+  }, [isPlaying, startMetadataPolling, stopMetadataPolling, updateShows]);
 
   const togglePlayback = async () => {
     try {
       if (isPlaying) {
-        // Stop live stream
         console.log('[Home] User tapped Stop button');
         await audioManager.stopCurrentAudio();
         setIsPlaying(false);
       } else {
-        // Start live stream (will automatically stop any on-demand song)
         console.log('[Home] User tapped Listen Live button');
         setLoading(true);
         
-        // Use metadata for Now Playing info if available
         const title = metadata?.title || 'Yo Hit Radio – Live Stream';
         const artist = metadata?.artist || 'Live Stream';
         
@@ -260,9 +259,9 @@ export default function HomeScreen() {
     }
   };
 
-  // Display metadata if available, otherwise show defaults
-  const displayTitle = metadata?.title || 'Yo Hit Radio';
-  const displayArtist = metadata?.artist || 'Live Stream';
+  const displayTitle = metadata?.title || 'Live Stream';
+  const displayArtist = metadata?.artist || 'Yo Hit Radio';
+  const displayArtwork = metadata?.artwork;
 
   return (
     <LinearGradient colors={['#1a0033', '#330066', '#1a0033']} style={styles.gradient}>
@@ -271,7 +270,6 @@ export default function HomeScreen() {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          {/* Logo Section - Image-based logo */}
           <View style={styles.logoContainer}>
             <Image
               source={require('@/assets/images/821e24d8-2a3e-485e-8842-32518269360d.png')}
@@ -284,19 +282,24 @@ export default function HomeScreen() {
             </View>
           </View>
 
-          {/* Now Playing Card */}
           <View style={styles.nowPlayingCard}>
             <Text style={styles.nowPlayingLabel}>NOW PLAYING</Text>
-            <Animated.View style={[styles.coverImageContainer, animatedStyle]}>
-              <View style={styles.placeholderCover}>
-                <IconSymbol
-                  ios_icon_name="music.note"
-                  android_material_icon_name="music-note"
-                  size={64}
-                  color="#FFD700"
-                />
-              </View>
-            </Animated.View>
+            {displayArtwork ? (
+              <Animated.View style={[styles.coverImageContainer, animatedStyle]}>
+                <Image source={{ uri: displayArtwork }} style={styles.coverImage} />
+              </Animated.View>
+            ) : (
+              <Animated.View style={[styles.coverImageContainer, animatedStyle]}>
+                <View style={styles.placeholderCover}>
+                  <IconSymbol
+                    ios_icon_name="music.note"
+                    android_material_icon_name="music-note"
+                    size={64}
+                    color="#FFD700"
+                  />
+                </View>
+              </Animated.View>
+            )}
             <Text style={styles.songTitle} numberOfLines={2}>
               {displayTitle}
             </Text>
@@ -305,7 +308,6 @@ export default function HomeScreen() {
             </Text>
           </View>
 
-          {/* Listen Live Button */}
           <TouchableOpacity
             style={[styles.listenLiveButton, loading && styles.buttonDisabled]}
             onPress={togglePlayback}
@@ -322,9 +324,7 @@ export default function HomeScreen() {
             </Text>
           </TouchableOpacity>
 
-          {/* Current Show and Next Show Cards */}
           <View style={styles.showCardsContainer}>
-            {/* Current Show Card */}
             <View style={styles.showCard}>
               <View style={styles.showCardHeader}>
                 <IconSymbol
@@ -357,7 +357,6 @@ export default function HomeScreen() {
               )}
             </View>
 
-            {/* Next Show Card */}
             <View style={styles.showCard}>
               <View style={styles.showCardHeader}>
                 <IconSymbol
