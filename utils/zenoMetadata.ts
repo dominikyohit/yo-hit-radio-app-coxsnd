@@ -2,13 +2,21 @@
 /**
  * Zeno Radio Metadata Fetcher
  * 
+ * ONLY uses the official Zeno Metadata API - NO ICY metadata
+ * ICY metadata does NOT work with Zeno.fm streams
+ * 
  * Fetches live "Now Playing" metadata via backend proxy
  * Backend proxies Zeno Radio's official Metadata API to avoid CORS issues
  * 
  * CONFIGURATION:
  * Station Mount: hmc38shnrwzuv
  * Stream URL: https://stream.zeno.fm/hmc38shnrwzuv
+ * Zeno Metadata API: https://api.zeno.fm/mounts/metadata/subscribe/hmc38shnrwzuv
  * Backend Proxy: /api/now-playing
+ * 
+ * POLLING:
+ * Metadata is fetched every 10-15 seconds while the stream is playing
+ * (Currently set to 12 seconds in the Home screen component)
  */
 
 import Constants from 'expo-constants';

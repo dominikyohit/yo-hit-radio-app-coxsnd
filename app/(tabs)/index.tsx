@@ -30,7 +30,7 @@ import { parseEventDate, formatDateBadge } from '@/utils/dateHelpers';
 import { decodeHtmlEntities } from '@/utils/htmlDecoder';
 
 const STREAM_URL = 'https://stream.zeno.fm/hmc38shnrwzuv';
-const METADATA_POLL_INTERVAL = 12000; // 12 seconds
+const METADATA_POLL_INTERVAL = 12000; // 12 seconds - polls Zeno Metadata API every 12 seconds while playing
 const WORDPRESS_SCHEDULE_URL = 'https://yohitradio.com/wp-json/wp/v2/calendrier?per_page=100&_embed';
 
 interface Show {
@@ -227,13 +227,13 @@ export default function HomeScreen() {
   }, [isPlaying, rotation]);
 
   const fetchMetadata = useCallback(async () => {
-    console.log('[Home] Fetching metadata... (isPlaying:', isPlaying, ')');
+    console.log('[Home] Fetching metadata from Zeno API... (isPlaying:', isPlaying, ')');
     try {
       const data = await getZenoMetadata();
-      console.log('[Home] Fetched metadata:', data);
+      console.log('[Home] Fetched metadata from Zeno API:', data);
       setMetadata(data);
     } catch (error) {
-      console.error('[Home] Error fetching metadata:', error);
+      console.error('[Home] Error fetching metadata from Zeno API:', error);
     }
   }, [isPlaying]);
 
@@ -567,8 +567,25 @@ export default function HomeScreen() {
   };
 
   // Parse metadata with proper fallbacks
-  const displayTitle = metadata?.displayTitle || 'Live Stream';
-  const displayArtist = metadata?.displayArtist || 'Yo Hit Radio';
+  // Format: "Now Playing: Artist – Title" or "Live Stream – Yo Hit Radio"
+  let nowPlayingText = '';
+  if (metadata && (metadata.displayTitle || metadata.displayArtist)) {
+    const artist = metadata.displayArtist || '';
+    const title = metadata.displayTitle || '';
+    
+    if (artist && title) {
+      nowPlayingText = `${artist} – ${title}`;
+    } else if (title) {
+      nowPlayingText = title;
+    } else if (artist) {
+      nowPlayingText = artist;
+    } else {
+      nowPlayingText = 'Live Stream – Yo Hit Radio';
+    }
+  } else {
+    nowPlayingText = 'Live Stream – Yo Hit Radio';
+  }
+  
   const displayArtwork = metadata?.coverImage;
 
   return (
@@ -609,10 +626,7 @@ export default function HomeScreen() {
               </Animated.View>
             )}
             <Text style={styles.songTitle} numberOfLines={2}>
-              {displayTitle}
-            </Text>
-            <Text style={styles.artistName} numberOfLines={2}>
-              {displayArtist}
+              {nowPlayingText}
             </Text>
           </View>
 
