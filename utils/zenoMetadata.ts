@@ -46,7 +46,9 @@ export const getZenoMetadata = async (): Promise<ZenoMetadata> => {
     }
 
     const data = await response.json();
-    console.log('[Zeno Metadata] Raw API response:', JSON.stringify(data, null, 2));
+    
+    // 🚨 DEBUG: Log the raw response from Zeno API
+    console.log("ZENO RAW RESPONSE =", JSON.stringify(data, null, 2));
 
     // Parse the response and map to our display format
     const metadata = parseZenoNowPlaying(data);

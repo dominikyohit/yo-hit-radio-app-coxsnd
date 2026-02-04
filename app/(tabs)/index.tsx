@@ -162,7 +162,6 @@ const getCurrentAndNextShows = (): { currentShow: Show | null; nextShow: Show | 
 export default function HomeScreen() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [metadata, setMetadata] = useState<LiveMetadata | null>(null);
-  const [rawMetadataDebug, setRawMetadataDebug] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [currentShow, setCurrentShow] = useState<Show | null>(null);
   const [nextShow, setNextShow] = useState<Show | null>(null);
@@ -193,18 +192,9 @@ export default function HomeScreen() {
     try {
       const data = await fetchLiveMetadata();
       console.log('[Home] Fetched metadata:', data);
-      
-      // DEBUG: Store raw metadata JSON for display
-      if (__DEV__) {
-        setRawMetadataDebug(JSON.stringify(data, null, 2));
-      }
-      
       setMetadata(data);
     } catch (error) {
       console.error('[Home] Error fetching metadata:', error);
-      if (__DEV__) {
-        setRawMetadataDebug(`Error: ${error}`);
-      }
     }
   }, [isPlaying]);
 
@@ -227,9 +217,6 @@ export default function HomeScreen() {
       metadataInterval.current = null;
     }
     setMetadata(null);
-    if (__DEV__) {
-      setRawMetadataDebug('');
-    }
   }, []);
 
   useEffect(() => {
@@ -286,6 +273,9 @@ export default function HomeScreen() {
     ? metadata.artist 
     : 'Yo Hit Radio';
   const displayArtwork = metadata?.artwork;
+  
+  // 🚨 DEBUG: Prepare metadata JSON string for display
+  const metadataDebugString = JSON.stringify(metadata);
 
   return (
     <LinearGradient colors={['#1a0033', '#330066', '#1a0033']} style={styles.gradient}>
@@ -331,14 +321,9 @@ export default function HomeScreen() {
               {displayArtist}
             </Text>
             
-            {__DEV__ && rawMetadataDebug && (
-              <View style={styles.debugContainer}>
-                <Text style={styles.debugLabel}>DEBUG - Raw Metadata:</Text>
-                <Text style={styles.debugText} numberOfLines={10}>
-                  {rawMetadataDebug}
-                </Text>
-              </View>
-            )}
+            <Text style={styles.debugText}>
+              DEBUG: {metadataDebugString}
+            </Text>
           </View>
 
           <TouchableOpacity
@@ -516,24 +501,13 @@ const styles = StyleSheet.create({
     color: '#CCCCCC',
     fontSize: 14,
     textAlign: 'center',
-  },
-  debugContainer: {
-    marginTop: 15,
-    padding: 10,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    borderRadius: 8,
-    width: '100%',
-  },
-  debugLabel: {
-    color: '#FFD700',
-    fontSize: 10,
-    fontWeight: 'bold',
-    marginBottom: 5,
+    marginBottom: 10,
   },
   debugText: {
-    color: '#FFFFFF',
+    color: 'white',
     fontSize: 10,
-    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    textAlign: 'center',
+    marginTop: 10,
   },
   listenLiveButton: {
     backgroundColor: '#FFD700',
