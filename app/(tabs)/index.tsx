@@ -236,17 +236,25 @@ export default function HomeScreen() {
     try {
       if (isPlaying) {
         // Stop live stream
+        console.log('[Home] User tapped Stop button');
         await audioManager.stopCurrentAudio();
         setIsPlaying(false);
       } else {
         // Start live stream (will automatically stop any on-demand song)
+        console.log('[Home] User tapped Listen Live button');
         setLoading(true);
-        await audioManager.playAudio(STREAM_URL, true);
+        
+        // Use metadata for Now Playing info if available
+        const title = metadata?.title || 'Yo Hit Radio – Live Stream';
+        const artist = metadata?.artist || 'Live Stream';
+        
+        await audioManager.playAudio(STREAM_URL, true, title, artist);
         setIsPlaying(true);
         setLoading(false);
+        console.log('[Home] Live stream started successfully with background playback enabled');
       }
     } catch (error) {
-      console.error('Error toggling playback:', error);
+      console.error('[Home] Error toggling playback:', error);
       setLoading(false);
       setIsPlaying(false);
     }

@@ -1,3 +1,4 @@
+
 {
   "expo": {
     "name": "Yo Hit Radio",
@@ -16,7 +17,10 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.anonymous.Natively",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "UIBackgroundModes": [
+          "audio"
+        ]
       }
     },
     "android": {
