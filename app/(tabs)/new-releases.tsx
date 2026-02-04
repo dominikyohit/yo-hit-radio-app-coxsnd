@@ -17,6 +17,7 @@ import {
 } from 'react-native';
 import { colors } from '@/styles/commonStyles';
 import AudioManager from '@/utils/audioManager';
+import { decodeHtmlEntities } from '@/utils/htmlDecoder';
 
 interface WordPressSong {
   id: number;
@@ -74,9 +75,11 @@ export default function NewReleasesScreen() {
           sortDate = new Date(song.date);
         }
 
+        const decodedTitle = decodeHtmlEntities(song.title.rendered);
+
         return {
           id: song.id,
-          title: song.title.rendered,
+          title: decodedTitle,
           artist: song.acf?.artist_name || 'Unknown Artist',
           coverImage: song._embedded?.['wp:featuredmedia']?.[0]?.source_url || null,
           audioUrl: song.acf?.audio_url || '',

@@ -18,6 +18,7 @@ import { IconSymbol } from '@/components/IconSymbol';
 import { colors } from '@/styles/commonStyles';
 import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
 import { parseEventDate, formatDateFull } from '@/utils/dateHelpers';
+import { decodeHtmlEntities } from '@/utils/htmlDecoder';
 
 // Helper to resolve image sources (handles both local and remote URLs)
 function resolveImageSource(source: string | number | ImageSourcePropType | undefined): ImageSourcePropType {
@@ -30,7 +31,8 @@ export default function EventDetailsScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   
-  const title = String(params.title || '');
+  const titleRaw = String(params.title || '');
+  const title = decodeHtmlEntities(titleRaw);
   const eventDateRaw = String(params.event_date_raw || '');
   const eventLocation = String(params.event_location || '');
   const eventPrice = String(params.event_price || '');

@@ -17,6 +17,7 @@ import { IconSymbol } from '@/components/IconSymbol';
 import { colors } from '@/styles/commonStyles';
 import { useRouter } from 'expo-router';
 import { parseEventDate, formatDateBadge, formatDateFull } from '@/utils/dateHelpers';
+import { decodeHtmlEntities } from '@/utils/htmlDecoder';
 
 interface WordPressEvent {
   id: number;
@@ -89,10 +90,11 @@ export default function EventsScreen() {
       const processedEvents: Event[] = data
         .map((event) => {
           const eventDate = parseEventDate(event.acf?.event_date);
+          const decodedTitle = decodeHtmlEntities(event.title.rendered);
           
           return {
             id: String(event.id),
-            title: event.title.rendered,
+            title: decodedTitle,
             event_date_raw: event.acf?.event_date || '',
             event_date: eventDate,
             event_location: event.acf?.event_location || '',

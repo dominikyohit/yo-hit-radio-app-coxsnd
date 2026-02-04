@@ -16,6 +16,7 @@ import { IconSymbol } from '@/components/IconSymbol';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
 import React, { useState, useEffect } from 'react';
+import { decodeHtmlEntities } from '@/utils/htmlDecoder';
 
 // WordPress REST API response format
 interface WordPressPost {
@@ -183,9 +184,11 @@ export default function ArticleDetailsScreen() {
       console.log('[ArticleDetails] Fetched WordPress post:', wpPost);
       
       // Map WordPress post to Article format for UI
+      const decodedTitle = decodeHtmlEntities(wpPost.title?.rendered ?? '');
+      
       const mappedArticle: Article = {
         id: String(wpPost.id),
-        title: wpPost.title?.rendered ?? '',
+        title: decodedTitle,
         excerpt: stripHtml(wpPost.excerpt?.rendered ?? ''),
         content: stripHtml(wpPost.content?.rendered ?? ''),
         featured_image_url: wpPost._embedded?.['wp:featuredmedia']?.[0]?.source_url ?? null,

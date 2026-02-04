@@ -15,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import React, { useState, useEffect } from 'react';
 import { colors } from '@/styles/commonStyles';
+import { decodeHtmlEntities } from '@/utils/htmlDecoder';
 
 // WordPress REST API response format
 interface WordPressPost {
@@ -178,16 +179,20 @@ export default function NewsScreen() {
       console.log('[News] Fetched WordPress posts:', wpPosts);
       
       // Map WordPress posts to Article format for UI
-      const mappedArticles: Article[] = wpPosts.map((post) => ({
-        id: String(post.id),
-        title: post.title?.rendered ?? '',
-        excerpt: stripHtml(post.excerpt?.rendered ?? ''),
-        content: post.content?.rendered ?? '',
-        featured_image_url: post._embedded?.['wp:featuredmedia']?.[0]?.source_url ?? null,
-        published_date: post.date ?? '',
-        author: 'Yo Hit Radio',
-        created_at: post.date ?? '',
-      }));
+      const mappedArticles: Article[] = wpPosts.map((post) => {
+        const decodedTitle = decodeHtmlEntities(post.title?.rendered ?? '');
+        
+        return {
+          id: String(post.id),
+          title: decodedTitle,
+          excerpt: stripHtml(post.excerpt?.rendered ?? ''),
+          content: post.content?.rendered ?? '',
+          featured_image_url: post._embedded?.['wp:featuredmedia']?.[0]?.source_url ?? null,
+          published_date: post.date ?? '',
+          author: 'Yo Hit Radio',
+          created_at: post.date ?? '',
+        };
+      });
       
       console.log('[News] Mapped articles:', mappedArticles);
       setArticles(mappedArticles);
