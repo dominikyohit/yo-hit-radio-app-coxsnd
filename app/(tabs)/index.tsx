@@ -9,6 +9,8 @@ import {
   Image,
   Dimensions,
   Platform,
+  ActivityIndicator,
+  ImageSourcePropType,
 } from 'react-native';
 import { colors } from '@/styles/commonStyles';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -24,6 +26,8 @@ import Animated, {
 } from 'react-native-reanimated';
 import AudioManager from '@/utils/audioManager';
 import { getZenoMetadata, ZenoMetadata } from '@/utils/zenoMetadata';
+import { parseEventDate, formatDateBadge } from '@/utils/dateHelpers';
+import { decodeHtmlEntities } from '@/utils/htmlDecoder';
 
 const STREAM_URL = 'https://stream.zeno.fm/hmc38shnrwzuv';
 const METADATA_POLL_INTERVAL = 12000; // 12 seconds
@@ -36,6 +40,74 @@ interface Show {
 
 interface Schedule {
   [day: string]: Show[];
+}
+
+// Preview data interfaces
+interface WordPressEvent {
+  id: number;
+  title: { rendered: string };
+  acf: {
+    event_date: string;
+    event_location: string;
+    event_price: string;
+    event_artists: string;
+    ticket_link: string;
+  };
+  _embedded?: {
+    'wp:featuredmedia'?: {
+      source_url?: string;
+    }[];
+  };
+}
+
+interface PreviewEvent {
+  id: string;
+  title: string;
+  event_date_raw: string;
+  event_date: Date | null;
+  event_location: string;
+  flyer_image: string | null;
+}
+
+interface WordPressPost {
+  id: number;
+  title: { rendered: string };
+  date: string;
+  _embedded?: {
+    'wp:featuredmedia'?: {
+      source_url?: string;
+    }[];
+  };
+}
+
+interface PreviewArticle {
+  id: string;
+  title: string;
+  published_date: string;
+  featured_image_url: string | null;
+}
+
+interface WordPressSong {
+  id: number;
+  title: { rendered: string };
+  date: string;
+  acf: {
+    artist_name: string;
+    release_date: string;
+  };
+  _embedded?: {
+    'wp:featuredmedia'?: {
+      source_url?: string;
+    }[];
+  };
+}
+
+interface PreviewRelease {
+  id: number;
+  title: string;
+  artist: string;
+  coverImage: string | null;
+  releaseDate: string;
 }
 
 // Schedule data matching the Shows tab
@@ -159,12 +231,26 @@ const getCurrentAndNextShows = (): { currentShow: Show | null; nextShow: Show | 
   return { currentShow, nextShow };
 };
 
+// Helper to resolve image sources
+function resolveImageSource(source: string | number | ImageSourcePropType | undefined): ImageSourcePropType {
+  if (!source) return { uri: '' };
+  if (typeof source === 'string') return { uri: source };
+  return source as ImageSourcePropType;
+}
+
 export default function HomeScreen() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [metadata, setMetadata] = useState<ZenoMetadata | null>(null);
   const [loading, setLoading] = useState(false);
   const [currentShow, setCurrentShow] = useState<Show | null>(null);
   const [nextShow, setNextShow] = useState<Show | null>(null);
+  
+  // Preview sections state
+  const [previewEvents, setPreviewEvents] = useState<PreviewEvent[]>([]);
+  const [previewNews, setPreviewNews] = useState<PreviewArticle[]>([]);
+  const [previewReleases, setPreviewReleases] = useState<PreviewRelease[]>([]);
+  const [loadingPreviews, setLoadingPreviews] = useState(true);
+  
   const metadataInterval = useRef<NodeJS.Timeout | null>(null);
   const showUpdateInterval = useRef<NodeJS.Timeout | null>(null);
   const router = useRouter();
@@ -219,6 +305,118 @@ export default function HomeScreen() {
     setMetadata(null);
   }, []);
 
+  // Fetch preview data for all 3 sections
+  const fetchPreviewData = useCallback(async () => {
+    console.log('[Home] Fetching preview data for Events, News, and Releases');
+    setLoadingPreviews(true);
+    
+    try {
+      // Fetch Events (2 upcoming)
+      const eventsResponse = await fetch('https://yohitradio.com/wp-json/wp/v2/bal?_embed&per_page=100');
+      if (eventsResponse.ok) {
+        const eventsData: WordPressEvent[] = await eventsResponse.json();
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        
+        const upcomingEvents: PreviewEvent[] = eventsData
+          .map((event) => {
+            const eventDate = parseEventDate(event.acf?.event_date);
+            const decodedTitle = decodeHtmlEntities(event.title.rendered);
+            
+            return {
+              id: String(event.id),
+              title: decodedTitle,
+              event_date_raw: event.acf?.event_date || '',
+              event_date: eventDate,
+              event_location: event.acf?.event_location || '',
+              flyer_image: event._embedded?.['wp:featuredmedia']?.[0]?.source_url || null,
+            };
+          })
+          .filter((event) => {
+            if (!event.event_date) return false;
+            const eventDateNormalized = new Date(event.event_date);
+            eventDateNormalized.setHours(0, 0, 0, 0);
+            return eventDateNormalized >= today;
+          })
+          .sort((a, b) => {
+            const timeA = a.event_date?.getTime() || 0;
+            const timeB = b.event_date?.getTime() || 0;
+            return timeA - timeB;
+          })
+          .slice(0, 2);
+        
+        setPreviewEvents(upcomingEvents);
+        console.log('[Home] Fetched preview events:', upcomingEvents.length);
+      }
+    } catch (error) {
+      console.error('[Home] Error fetching preview events:', error);
+    }
+    
+    try {
+      // Fetch News (2 latest)
+      const newsResponse = await fetch('https://yohitradio.com/wp-json/wp/v2/posts?_embed&per_page=2');
+      if (newsResponse.ok) {
+        const newsData: WordPressPost[] = await newsResponse.json();
+        const latestNews: PreviewArticle[] = newsData.map((post) => {
+          const decodedTitle = decodeHtmlEntities(post.title?.rendered ?? '');
+          
+          return {
+            id: String(post.id),
+            title: decodedTitle,
+            published_date: post.date ?? '',
+            featured_image_url: post._embedded?.['wp:featuredmedia']?.[0]?.source_url ?? null,
+          };
+        });
+        
+        setPreviewNews(latestNews);
+        console.log('[Home] Fetched preview news:', latestNews.length);
+      }
+    } catch (error) {
+      console.error('[Home] Error fetching preview news:', error);
+    }
+    
+    try {
+      // Fetch Releases (2 latest)
+      const releasesResponse = await fetch('https://yohitradio.com/wp-json/wp/v2/song?per_page=2&orderby=date&order=desc&_embed');
+      if (releasesResponse.ok) {
+        const releasesData: WordPressSong[] = await releasesResponse.json();
+        const latestReleases: PreviewRelease[] = releasesData.map((song) => {
+          const decodedTitle = decodeHtmlEntities(song.title.rendered);
+          
+          // Format release date
+          let releaseDate = '';
+          if (song.acf?.release_date && /^\d{8}$/.test(song.acf.release_date)) {
+            const year = song.acf.release_date.substring(0, 4);
+            const month = song.acf.release_date.substring(4, 6);
+            const day = song.acf.release_date.substring(6, 8);
+            const date = new Date(`${year}-${month}-${day}`);
+            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            releaseDate = `${months[date.getMonth()]} ${day}, ${year}`;
+          } else if (song.date) {
+            const date = new Date(song.date);
+            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            releaseDate = `${months[date.getMonth()]} ${String(date.getDate()).padStart(2, '0')}, ${date.getFullYear()}`;
+          }
+          
+          return {
+            id: song.id,
+            title: decodedTitle,
+            artist: song.acf?.artist_name || 'Unknown Artist',
+            coverImage: song._embedded?.['wp:featuredmedia']?.[0]?.source_url || null,
+            releaseDate: releaseDate,
+          };
+        });
+        
+        setPreviewReleases(latestReleases);
+        console.log('[Home] Fetched preview releases:', latestReleases.length);
+      }
+    } catch (error) {
+      console.error('[Home] Error fetching preview releases:', error);
+    }
+    
+    setLoadingPreviews(false);
+  }, []);
+
   useEffect(() => {
     console.log('[Home] isPlaying changed to:', isPlaying);
     
@@ -239,6 +437,11 @@ export default function HomeScreen() {
       }
     };
   }, [isPlaying, startMetadataPolling, stopMetadataPolling, updateShows, fetchMetadata]);
+
+  // Fetch preview data on mount
+  useEffect(() => {
+    fetchPreviewData();
+  }, [fetchPreviewData]);
 
   const togglePlayback = async () => {
     try {
@@ -262,6 +465,60 @@ export default function HomeScreen() {
       console.error('[Home] Error toggling playback:', error);
       setLoading(false);
       setIsPlaying(false);
+    }
+  };
+
+  const handleNavigateToEvents = () => {
+    console.log('[Home] User tapped More events');
+    router.push('/(tabs)/events');
+  };
+
+  const handleNavigateToNews = () => {
+    console.log('[Home] User tapped More news');
+    router.push('/(tabs)/news');
+  };
+
+  const handleNavigateToReleases = () => {
+    console.log('[Home] User tapped More releases');
+    router.push('/(tabs)/new-releases');
+  };
+
+  const handleEventPress = (event: PreviewEvent) => {
+    console.log('[Home] User tapped event preview:', event.title);
+    router.push({
+      pathname: '/event-details',
+      params: {
+        id: event.id,
+        title: event.title,
+        event_date_raw: event.event_date_raw,
+        event_location: event.event_location,
+        flyer_image: event.flyer_image || '',
+      },
+    });
+  };
+
+  const handleNewsPress = (article: PreviewArticle) => {
+    console.log('[Home] User tapped news preview:', article.title);
+    router.push({
+      pathname: '/article-details',
+      params: { id: article.id },
+    });
+  };
+
+  const handleReleasePress = (release: PreviewRelease) => {
+    console.log('[Home] User tapped release preview:', release.title);
+    router.push('/(tabs)/new-releases');
+  };
+
+  const formatPreviewDate = (dateString: string): string => {
+    if (!dateString) return '';
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) return '';
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      return `${months[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
+    } catch (error) {
+      return '';
     }
   };
 
@@ -396,6 +653,204 @@ export default function HomeScreen() {
               )}
             </View>
           </View>
+
+          {/* PREVIEW SECTION 1: UPCOMING EVENTS */}
+          <View style={styles.previewSection}>
+            <View style={styles.previewHeader}>
+              <Text style={styles.previewTitle}>Upcoming Events</Text>
+              <TouchableOpacity onPress={handleNavigateToEvents} activeOpacity={0.7}>
+                <Text style={styles.moreLink}>More events</Text>
+              </TouchableOpacity>
+            </View>
+            
+            {loadingPreviews ? (
+              <View style={styles.previewLoading}>
+                <ActivityIndicator size="small" color="#FFD700" />
+              </View>
+            ) : previewEvents.length === 0 ? (
+              <View style={styles.previewEmpty}>
+                <Text style={styles.previewEmptyText}>No upcoming events</Text>
+              </View>
+            ) : (
+              <View style={styles.previewCardsContainer}>
+                {previewEvents.map((event, index) => {
+                  const dateBadgeText = formatDateBadge(event.event_date);
+                  
+                  return (
+                    <TouchableOpacity
+                      key={index}
+                      style={styles.previewCard}
+                      onPress={() => handleEventPress(event)}
+                      activeOpacity={0.8}
+                    >
+                      {event.flyer_image ? (
+                        <Image
+                          source={resolveImageSource(event.flyer_image)}
+                          style={styles.previewImage}
+                          resizeMode="cover"
+                        />
+                      ) : (
+                        <View style={styles.previewImagePlaceholder}>
+                          <IconSymbol
+                            ios_icon_name="calendar"
+                            android_material_icon_name="event"
+                            size={40}
+                            color="rgba(255, 215, 0, 0.3)"
+                          />
+                        </View>
+                      )}
+                      <View style={styles.previewCardContent}>
+                        <Text style={styles.previewCardTitle} numberOfLines={2}>
+                          {event.title}
+                        </Text>
+                        <View style={styles.previewCardMeta}>
+                          {dateBadgeText && (
+                            <Text style={styles.previewCardMetaText}>{dateBadgeText}</Text>
+                          )}
+                        </View>
+                        {event.event_location && (
+                          <View style={styles.previewCardLocation}>
+                            <IconSymbol
+                              ios_icon_name="location"
+                              android_material_icon_name="location-on"
+                              size={12}
+                              color="#B8B8B8"
+                            />
+                            <Text style={styles.previewCardLocationText} numberOfLines={1}>
+                              {event.event_location}
+                            </Text>
+                          </View>
+                        )}
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )}
+          </View>
+
+          {/* PREVIEW SECTION 2: LATEST NEWS */}
+          <View style={styles.previewSection}>
+            <View style={styles.previewHeader}>
+              <Text style={styles.previewTitle}>Latest News</Text>
+              <TouchableOpacity onPress={handleNavigateToNews} activeOpacity={0.7}>
+                <Text style={styles.moreLink}>More news</Text>
+              </TouchableOpacity>
+            </View>
+            
+            {loadingPreviews ? (
+              <View style={styles.previewLoading}>
+                <ActivityIndicator size="small" color="#FFD700" />
+              </View>
+            ) : previewNews.length === 0 ? (
+              <View style={styles.previewEmpty}>
+                <Text style={styles.previewEmptyText}>No news available</Text>
+              </View>
+            ) : (
+              <View style={styles.previewCardsContainer}>
+                {previewNews.map((article, index) => {
+                  const formattedDate = formatPreviewDate(article.published_date);
+                  
+                  return (
+                    <TouchableOpacity
+                      key={index}
+                      style={styles.previewCard}
+                      onPress={() => handleNewsPress(article)}
+                      activeOpacity={0.8}
+                    >
+                      {article.featured_image_url ? (
+                        <Image
+                          source={resolveImageSource(article.featured_image_url)}
+                          style={styles.previewImage}
+                          resizeMode="cover"
+                        />
+                      ) : (
+                        <View style={styles.previewImagePlaceholder}>
+                          <IconSymbol
+                            ios_icon_name="newspaper"
+                            android_material_icon_name="article"
+                            size={40}
+                            color="rgba(255, 215, 0, 0.3)"
+                          />
+                        </View>
+                      )}
+                      <View style={styles.previewCardContent}>
+                        <Text style={styles.previewCardTitle} numberOfLines={2}>
+                          {article.title}
+                        </Text>
+                        {formattedDate && (
+                          <View style={styles.previewCardMeta}>
+                            <Text style={styles.previewCardMetaText}>{formattedDate}</Text>
+                          </View>
+                        )}
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )}
+          </View>
+
+          {/* PREVIEW SECTION 3: NEW RELEASES */}
+          <View style={styles.previewSection}>
+            <View style={styles.previewHeader}>
+              <Text style={styles.previewTitle}>New Releases</Text>
+              <TouchableOpacity onPress={handleNavigateToReleases} activeOpacity={0.7}>
+                <Text style={styles.moreLink}>More releases</Text>
+              </TouchableOpacity>
+            </View>
+            
+            {loadingPreviews ? (
+              <View style={styles.previewLoading}>
+                <ActivityIndicator size="small" color="#FFD700" />
+              </View>
+            ) : previewReleases.length === 0 ? (
+              <View style={styles.previewEmpty}>
+                <Text style={styles.previewEmptyText}>No releases available</Text>
+              </View>
+            ) : (
+              <View style={styles.previewCardsContainer}>
+                {previewReleases.map((release, index) => (
+                  <TouchableOpacity
+                    key={index}
+                    style={styles.previewCard}
+                    onPress={() => handleReleasePress(release)}
+                    activeOpacity={0.8}
+                  >
+                    {release.coverImage ? (
+                      <Image
+                        source={resolveImageSource(release.coverImage)}
+                        style={styles.previewImage}
+                        resizeMode="cover"
+                      />
+                    ) : (
+                      <View style={styles.previewImagePlaceholder}>
+                        <IconSymbol
+                          ios_icon_name="music.note"
+                          android_material_icon_name="music-note"
+                          size={40}
+                          color="rgba(255, 215, 0, 0.3)"
+                        />
+                      </View>
+                    )}
+                    <View style={styles.previewCardContent}>
+                      <Text style={styles.previewCardTitle} numberOfLines={2}>
+                        {release.title}
+                      </Text>
+                      <View style={styles.previewCardMeta}>
+                        <Text style={styles.previewCardMetaText}>{release.artist}</Text>
+                      </View>
+                      {release.releaseDate && (
+                        <View style={styles.previewCardMeta}>
+                          <Text style={styles.previewCardDateText}>{release.releaseDate}</Text>
+                        </View>
+                      )}
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+          </View>
         </ScrollView>
       </SafeAreaView>
     </LinearGradient>
@@ -518,6 +973,7 @@ const styles = StyleSheet.create({
   showCardsContainer: {
     flexDirection: 'row',
     gap: 12,
+    marginBottom: 30,
   },
   showCard: {
     flex: 1,
@@ -558,6 +1014,96 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   noShowText: {
+    color: '#888888',
+    fontSize: 14,
+    fontStyle: 'italic',
+  },
+  // NEW PREVIEW SECTION STYLES
+  previewSection: {
+    marginBottom: 30,
+  },
+  previewHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  previewTitle: {
+    color: '#FFFFFF',
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
+  moreLink: {
+    color: '#FFD700',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  previewCardsContainer: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  previewCard: {
+    flex: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 16,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 215, 0, 0.2)',
+  },
+  previewImage: {
+    width: '100%',
+    height: 140,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  previewImagePlaceholder: {
+    width: '100%',
+    height: 140,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  previewCardContent: {
+    padding: 12,
+  },
+  previewCardTitle: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: 'bold',
+    marginBottom: 6,
+    lineHeight: 20,
+  },
+  previewCardMeta: {
+    marginBottom: 4,
+  },
+  previewCardMetaText: {
+    color: '#FFD700',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  previewCardDateText: {
+    color: '#B8B8B8',
+    fontSize: 11,
+  },
+  previewCardLocation: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 4,
+  },
+  previewCardLocationText: {
+    color: '#B8B8B8',
+    fontSize: 11,
+    flex: 1,
+  },
+  previewLoading: {
+    paddingVertical: 40,
+    alignItems: 'center',
+  },
+  previewEmpty: {
+    paddingVertical: 40,
+    alignItems: 'center',
+  },
+  previewEmptyText: {
     color: '#888888',
     fontSize: 14,
     fontStyle: 'italic',
