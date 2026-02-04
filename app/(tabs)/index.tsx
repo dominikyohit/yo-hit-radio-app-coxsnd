@@ -636,7 +636,7 @@ export default function HomeScreen() {
           <View style={styles.showCardsContainer}>
             {/* ON AIR NOW CARD */}
             <View style={styles.showCard}>
-              <View style={styles.showCardTop}>
+              <View style={styles.showCardHeader}>
                 <View style={styles.onAirBadge}>
                   <View style={styles.onAirDot} />
                   <Text style={styles.onAirText}>ON AIR NOW</Text>
@@ -688,7 +688,7 @@ export default function HomeScreen() {
 
             {/* UP NEXT CARD */}
             <View style={styles.showCard}>
-              <View style={styles.showCardTop}>
+              <View style={styles.showCardHeader}>
                 <View style={styles.upNextBadge}>
                   <Text style={styles.upNextText}>UP NEXT</Text>
                 </View>
@@ -1062,25 +1062,24 @@ const styles = StyleSheet.create({
   },
   showCard: {
     flex: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
     borderRadius: 16,
-    padding: 14,
+    padding: 12,
     borderWidth: 1,
-    borderColor: 'rgba(255, 215, 0, 0.2)',
-    minHeight: 110,
+    borderColor: 'rgba(255, 215, 0, 0.15)',
   },
-  showCardTop: {
-    marginBottom: 12,
+  showCardHeader: {
+    marginBottom: 10,
   },
   onAirBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'flex-start',
-    backgroundColor: 'rgba(0, 255, 0, 0.2)',
+    backgroundColor: 'rgba(0, 255, 0, 0.15)',
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 8,
-    gap: 4,
+    borderRadius: 6,
+    gap: 5,
   },
   onAirDot: {
     width: 6,
@@ -1092,20 +1091,20 @@ const styles = StyleSheet.create({
     color: '#00FF00',
     fontSize: 10,
     fontWeight: 'bold',
-    letterSpacing: 0.8,
+    letterSpacing: 1,
   },
   upNextBadge: {
     alignSelf: 'flex-start',
-    backgroundColor: 'rgba(184, 184, 184, 0.2)',
+    backgroundColor: 'rgba(184, 184, 184, 0.15)',
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 8,
+    borderRadius: 6,
   },
   upNextText: {
     color: '#B8B8B8',
     fontSize: 10,
     fontWeight: 'bold',
-    letterSpacing: 0.8,
+    letterSpacing: 1,
   },
   showCardContent: {
     flexDirection: 'row',
@@ -1125,6 +1124,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 215, 0, 0.1)',
   },
   showTextContainer: {
     flex: 1,
@@ -1132,9 +1133,10 @@ const styles = StyleSheet.create({
   },
   showTitle: {
     color: '#FFFFFF',
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: 'bold',
-    marginBottom: 4,
+    marginBottom: 3,
+    lineHeight: 18,
   },
   showTimeRange: {
     color: '#B8B8B8',
