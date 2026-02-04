@@ -166,11 +166,7 @@ export default function NewsScreen() {
   const [hasMore, setHasMore] = useState(true);
   const router = useRouter();
 
-  useEffect(() => {
-    fetchArticles(1);
-  }, []);
-
-  const fetchArticles = async (pageNumber: number) => {
+  const fetchArticles = useCallback(async (pageNumber: number) => {
     console.log('[News] Fetching articles for page:', pageNumber);
     
     // Prevent multiple simultaneous requests
@@ -238,16 +234,20 @@ export default function NewsScreen() {
       setLoading(false);
       setLoadingMore(false);
     }
-  };
+  }, [loadingMore]);
+
+  useEffect(() => {
+    fetchArticles(1);
+  }, [fetchArticles]);
 
   const loadMoreArticles = useCallback(() => {
     if (!loadingMore && hasMore) {
       console.log('[News] Loading more articles, next page:', page + 1);
       fetchArticles(page + 1);
     }
-  }, [loadingMore, hasMore, page]);
+  }, [loadingMore, hasMore, page, fetchArticles]);
 
-  const formatDate = (dateString: string): string => {
+  const formatDate = useCallback((dateString: string): string => {
     // Handle empty or invalid dates
     if (!dateString) {
       return '';
@@ -270,15 +270,15 @@ export default function NewsScreen() {
       console.error('Error formatting date:', err);
       return '';
     }
-  };
+  }, []);
 
-  const handleArticlePress = (article: Article) => {
+  const handleArticlePress = useCallback((article: Article) => {
     console.log('[News] User tapped article:', article.title);
     router.push({
       pathname: '/article-details',
       params: { id: article.id },
     });
-  };
+  }, [router]);
 
   const renderArticleItem = ({ item }: { item: Article }) => {
     const formattedDate = formatDate(item.published_date);

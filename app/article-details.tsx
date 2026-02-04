@@ -161,20 +161,14 @@ export default function ArticleDetailsScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
 
-  // Function to fetch article details
-  async function fetchArticle() {
-    if (!id) {
-      setError('No article ID provided');
-      setLoading(false);
-      return;
-    }
-
+  // Function to fetch article details - declared as regular function before useEffect
+  async function fetchArticle(articleId: string) {
     try {
       setLoading(true);
       setError(null);
       
       // Fetch from WordPress REST API
-      const response = await fetch(`https://yohitradio.com/wp-json/wp/v2/posts/${id}?_embed`);
+      const response = await fetch(`https://yohitradio.com/wp-json/wp/v2/posts/${articleId}?_embed`);
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -210,9 +204,11 @@ export default function ArticleDetailsScreen() {
 
   useEffect(() => {
     if (!id) {
+      setError('No article ID provided');
+      setLoading(false);
       return;
     }
-    fetchArticle();
+    fetchArticle(id);
   }, [id]);
 
   const formatDate = (dateString: string): string => {
@@ -276,7 +272,7 @@ export default function ArticleDetailsScreen() {
         />
         <SafeAreaView style={styles.errorContainer}>
           <Text style={styles.errorText}>{error || 'Article not found'}</Text>
-          <TouchableOpacity style={styles.retryButton} onPress={fetchArticle}>
+          <TouchableOpacity style={styles.retryButton} onPress={() => id && fetchArticle(id)}>
             <Text style={styles.retryButtonText}>Retry</Text>
           </TouchableOpacity>
         </SafeAreaView>

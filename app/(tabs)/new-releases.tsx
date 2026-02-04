@@ -56,8 +56,38 @@ export default function NewReleasesScreen() {
   const [hasMore, setHasMore] = useState(true);
   const audioManager = AudioManager.getInstance();
 
-  useEffect(() => {
-    fetchSongs(1);
+  const formatDate = useCallback((releaseDate: string | undefined, fallbackDate: string): string => {
+    let dateToFormat = releaseDate;
+    
+    // If release_date exists and is in YYYYMMDD format
+    if (releaseDate && /^\d{8}$/.test(releaseDate)) {
+      const year = releaseDate.substring(0, 4);
+      const month = releaseDate.substring(4, 6);
+      const day = releaseDate.substring(6, 8);
+      const date = new Date(`${year}-${month}-${day}`);
+      
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      return `${months[date.getMonth()]} ${day}, ${year}`;
+    }
+    
+    // Fallback to post.date if release_date is empty or invalid
+    if (!releaseDate || releaseDate.trim() === '') {
+      dateToFormat = fallbackDate;
+    }
+    
+    // Format ISO date string
+    if (dateToFormat) {
+      try {
+        const date = new Date(dateToFormat);
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        return `${months[date.getMonth()]} ${String(date.getDate()).padStart(2, '0')}, ${date.getFullYear()}`;
+      } catch (error) {
+        console.error('Error formatting date:', error);
+        return '';
+      }
+    }
+    
+    return '';
   }, []);
 
   const fetchSongs = useCallback(async (pageNumber: number) => {
@@ -137,7 +167,11 @@ export default function NewReleasesScreen() {
       setLoadingMore(false);
       setRefreshing(false);
     }
-  }, [loadingMore]);
+  }, [loadingMore, formatDate]);
+
+  useEffect(() => {
+    fetchSongs(1);
+  }, [fetchSongs]);
 
   const loadMoreSongs = useCallback(() => {
     if (!loadingMore && hasMore) {
@@ -146,46 +180,12 @@ export default function NewReleasesScreen() {
     }
   }, [loadingMore, hasMore, page, fetchSongs]);
 
-  const handleRefresh = () => {
+  const handleRefresh = useCallback(() => {
     console.log('[Releases] User refreshing releases');
     setRefreshing(true);
     setHasMore(true);
     fetchSongs(1);
-  };
-
-  const formatDate = (releaseDate: string | undefined, fallbackDate: string): string => {
-    let dateToFormat = releaseDate;
-    
-    // If release_date exists and is in YYYYMMDD format
-    if (releaseDate && /^\d{8}$/.test(releaseDate)) {
-      const year = releaseDate.substring(0, 4);
-      const month = releaseDate.substring(4, 6);
-      const day = releaseDate.substring(6, 8);
-      const date = new Date(`${year}-${month}-${day}`);
-      
-      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      return `${months[date.getMonth()]} ${day}, ${year}`;
-    }
-    
-    // Fallback to post.date if release_date is empty or invalid
-    if (!releaseDate || releaseDate.trim() === '') {
-      dateToFormat = fallbackDate;
-    }
-    
-    // Format ISO date string
-    if (dateToFormat) {
-      try {
-        const date = new Date(dateToFormat);
-        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-        return `${months[date.getMonth()]} ${String(date.getDate()).padStart(2, '0')}, ${date.getFullYear()}`;
-      } catch (error) {
-        console.error('Error formatting date:', error);
-        return '';
-      }
-    }
-    
-    return '';
-  };
+  }, [fetchSongs]);
 
   const handleSongPress = async (song: Song) => {
     console.log('[Releases] User tapped song:', song.title);
