@@ -180,7 +180,7 @@ export default function ShowsScreen() {
     }
   }, []);
 
-  // Determine ON AIR NOW and UP NEXT shows (only for current day)
+  // Determine ON AIR NOW and UP NEXT shows with cross-day support and midnight-spanning shows
   const getLiveShowInfo = useCallback((scheduleData: DaySchedule[]): LiveShowInfo => {
     const now = new Date();
     const currentDayIndex = now.getDay(); // 0 for Sunday, 1 for Monday, etc.
@@ -188,64 +188,134 @@ export default function ShowsScreen() {
     const currentDayName = daysOfWeek[currentDayIndex];
     const currentTimeMinutes = now.getHours() * 60 + now.getMinutes();
 
+    console.log(`[LiveShowInfo] Current time: ${now.getHours()}:${now.getMinutes()} (${currentTimeMinutes} minutes), Day: ${currentDayName}`);
+
     let onAirShowId: number | null = null;
     let upNextShowId: number | null = null;
     let upNextDay: string | null = null;
+
+    // Helper to convert time string to minutes
+    const timeToMinutes = (timeStr: string): number => {
+      const [h, m] = timeStr.split(':').map(Number);
+      return h * 60 + m;
+    };
 
     // Find current day's schedule
     const currentDaySchedule = scheduleData.find(
       (ds) => ds.day.toLowerCase() === currentDayName
     );
 
+    // Check for shows spanning midnight from previous day
+    const previousDayIndex = (currentDayIndex - 1 + 7) % 7;
+    const previousDayName = daysOfWeek[previousDayIndex];
+    const previousDaySchedule = scheduleData.find(
+      (ds) => ds.day.toLowerCase() === previousDayName
+    );
+
+    // Check if a show from yesterday is still on air (spanning midnight)
+    if (previousDaySchedule) {
+      for (const show of previousDaySchedule.shows) {
+        const showStartMinutes = timeToMinutes(show.startTime);
+        const showEndMinutes = timeToMinutes(show.endTime);
+
+        // Show spans midnight if end time < start time
+        if (showEndMinutes < showStartMinutes) {
+          // This show spans into today
+          // It's on air if current time < end time
+          if (currentTimeMinutes < showEndMinutes) {
+            onAirShowId = show.id;
+            console.log(`[LiveShowInfo] ON AIR NOW (from yesterday): ${show.title} (${show.startTime}-${show.endTime})`);
+            
+            // UP NEXT is the first show of today (if exists)
+            if (currentDaySchedule && currentDaySchedule.shows.length > 0) {
+              upNextShowId = currentDaySchedule.shows[0].id;
+              upNextDay = currentDayName;
+              console.log(`[LiveShowInfo] UP NEXT: ${currentDaySchedule.shows[0].title} (${currentDaySchedule.shows[0].startTime}-${currentDaySchedule.shows[0].endTime})`);
+            }
+            return { onAirShowId, upNextShowId, upNextDay };
+          }
+        }
+      }
+    }
+
+    // Check today's shows
     if (currentDaySchedule) {
       const shows = currentDaySchedule.shows;
 
       for (let i = 0; i < shows.length; i++) {
         const show = shows[i];
-        const [startH, startM] = show.startTime.split(':').map(Number);
-        const [endH, endM] = show.endTime.split(':').map(Number);
-        const showStartMinutes = startH * 60 + startM;
-        const showEndMinutes = endH * 60 + endM;
+        const showStartMinutes = timeToMinutes(show.startTime);
+        let showEndMinutes = timeToMinutes(show.endTime);
+
+        // Handle shows spanning midnight (e.g., 22:00-02:00)
+        const spansMiddnight = showEndMinutes < showStartMinutes;
+        if (spansMiddnight) {
+          // Add 24 hours to end time for comparison
+          showEndMinutes += 24 * 60;
+        }
 
         // Check if current time is within [start, end)
         if (currentTimeMinutes >= showStartMinutes && currentTimeMinutes < showEndMinutes) {
           onAirShowId = show.id;
-          // Next show is the one after current (if exists)
+          console.log(`[LiveShowInfo] ON AIR NOW: ${show.title} (${show.startTime}-${show.endTime})`);
+          
+          // UP NEXT is the next show after this one
           if (i + 1 < shows.length) {
             upNextShowId = shows[i + 1].id;
             upNextDay = currentDayName;
+            console.log(`[LiveShowInfo] UP NEXT: ${shows[i + 1].title} (${shows[i + 1].startTime}-${shows[i + 1].endTime})`);
+          } else {
+            // No more shows today, UP NEXT is first show of next day
+            const nextDayIndex = (currentDayIndex + 1) % 7;
+            const nextDayName = daysOfWeek[nextDayIndex];
+            const nextDaySchedule = scheduleData.find(
+              (ds) => ds.day.toLowerCase() === nextDayName
+            );
+            if (nextDaySchedule && nextDaySchedule.shows.length > 0) {
+              upNextShowId = nextDaySchedule.shows[0].id;
+              upNextDay = nextDayName;
+              console.log(`[LiveShowInfo] UP NEXT (tomorrow): ${nextDaySchedule.shows[0].title} (${nextDaySchedule.shows[0].startTime}-${nextDaySchedule.shows[0].endTime})`);
+            }
           }
-          break;
-        } else if (currentTimeMinutes < showStartMinutes && !upNextShowId) {
-          // Current time is before this show, and we haven't found UP NEXT yet
+          return { onAirShowId, upNextShowId, upNextDay };
+        }
+      }
+
+      // No show is on air, find UP NEXT
+      for (let i = 0; i < shows.length; i++) {
+        const show = shows[i];
+        const showStartMinutes = timeToMinutes(show.startTime);
+
+        if (currentTimeMinutes < showStartMinutes) {
+          // This is the next show
           upNextShowId = show.id;
           upNextDay = currentDayName;
-          break;
+          console.log(`[LiveShowInfo] UP NEXT (later today): ${show.title} (${show.startTime}-${show.endTime})`);
+          return { onAirShowId, upNextShowId, upNextDay };
         }
       }
     }
 
-    // Edge case: If current time is after the last show of the day, UP NEXT is first show of next day
-    if (!onAirShowId && !upNextShowId) {
-      let nextDayIndex = (currentDayIndex + 1) % 7;
-      for (let i = 0; i < 7; i++) {
-        const nextDayName = daysOfWeek[nextDayIndex];
-        const nextDaySchedule = scheduleData.find(
-          (ds) => ds.day.toLowerCase() === nextDayName
-        );
-        if (nextDaySchedule && nextDaySchedule.shows.length > 0) {
-          upNextShowId = nextDaySchedule.shows[0].id;
-          upNextDay = nextDayName;
-          break;
-        }
-        nextDayIndex = (nextDayIndex + 1) % 7;
+    // Current time is after all shows today, UP NEXT is first show of next day
+    let nextDayIndex = (currentDayIndex + 1) % 7;
+    for (let i = 0; i < 7; i++) {
+      const nextDayName = daysOfWeek[nextDayIndex];
+      const nextDaySchedule = scheduleData.find(
+        (ds) => ds.day.toLowerCase() === nextDayName
+      );
+      if (nextDaySchedule && nextDaySchedule.shows.length > 0) {
+        upNextShowId = nextDaySchedule.shows[0].id;
+        upNextDay = nextDayName;
+        console.log(`[LiveShowInfo] UP NEXT (next available day): ${nextDaySchedule.shows[0].title} on ${nextDayName} (${nextDaySchedule.shows[0].startTime}-${nextDaySchedule.shows[0].endTime})`);
+        break;
       }
+      nextDayIndex = (nextDayIndex + 1) % 7;
     }
 
     return { onAirShowId, upNextShowId, upNextDay };
   }, []);
 
-  // Update live info periodically and check for day change
+  // Update live info periodically (every 30 seconds) and check for day change
   useEffect(() => {
     if (schedule.length > 0) {
       const updateLiveInfo = () => {
@@ -254,7 +324,7 @@ export default function ShowsScreen() {
         const daysOfWeek = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
         const todayName = daysOfWeek[currentDayIndex];
 
-        // Check if day has changed
+        // Check if day has changed (midnight transition)
         if (todayName !== currentDayName) {
           console.log('Day changed from', currentDayName, 'to', todayName, '- refreshing schedule order');
           setCurrentDayName(todayName);
@@ -267,7 +337,7 @@ export default function ShowsScreen() {
       };
 
       updateLiveInfo(); // Initial update
-      const interval = setInterval(updateLiveInfo, 60 * 1000); // Update every minute
+      const interval = setInterval(updateLiveInfo, 30 * 1000); // Update every 30 seconds
 
       return () => clearInterval(interval);
     }
@@ -390,6 +460,7 @@ export default function ShowsScreen() {
           ) : (
             schedule.map((daySchedule, dayIndex) => {
               const isCurrentDay = daySchedule.day.toLowerCase() === currentDayName;
+              const dayLowercase = daySchedule.day.toLowerCase();
 
               return (
                 <View key={dayIndex} style={styles.daySection}>
@@ -403,9 +474,10 @@ export default function ShowsScreen() {
                   </View>
 
                   {daySchedule.shows.map((show, showIndex) => {
-                    // Only show badges for current day
-                    const isOnAir = isCurrentDay && show.id === currentLiveInfo.onAirShowId;
-                    const isUpNext = isCurrentDay && show.id === currentLiveInfo.upNextShowId;
+                    // Determine if this show should have ON AIR NOW or UP NEXT badge
+                    const isOnAir = show.id === currentLiveInfo.onAirShowId;
+                    const isUpNext = show.id === currentLiveInfo.upNextShowId && 
+                                     dayLowercase === currentLiveInfo.upNextDay;
 
                     return (
                       <View
