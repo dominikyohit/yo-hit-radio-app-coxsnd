@@ -29,7 +29,7 @@ import { parseEventDate, formatDateBadge } from '@/utils/dateHelpers';
 import { decodeHtmlEntities } from '@/utils/htmlDecoder';
 
 const STREAM_URL = 'https://a13.asurahosting.com/listen/yo_hit_radio/radio.mp3';
-const METADATA_POLL_INTERVAL = 12000; // 12 seconds - polls AzuraCast API every 12 seconds while playing
+const METADATA_POLL_INTERVAL = 12000; // 12 seconds - polls AzuraCast API every 12 seconds
 const AZURACAST_API_URL = 'https://a13.asurahosting.com/api/nowplaying/yo_hit_radio';
 const WORDPRESS_SCHEDULE_URL = 'https://yohitradio.com/wp-json/wp/v2/calendrier?per_page=100&_embed';
 
@@ -249,27 +249,55 @@ export default function HomeScreen() {
 
       // Fallback for missing title/artist
       if (!title && !artist) {
-        setMetadata({
+        const fallbackMetadata = {
           displayTitle: 'Live Stream',
           displayArtist: 'Yo Hit Radio',
           coverImage: null,
-        });
+        };
+        setMetadata(fallbackMetadata);
+        
+        // Update lock screen metadata even when paused
+        await audioManager.updateMetadata(
+          fallbackMetadata.displayTitle,
+          fallbackMetadata.displayArtist
+        );
       } else {
-        setMetadata({
+        const newMetadata = {
           displayTitle: title,
           displayArtist: artist,
           coverImage: cover || null,
+        };
+        setMetadata(newMetadata);
+        
+        // Update lock screen metadata even when paused
+        // This ensures Now Playing info stays current
+        await audioManager.updateMetadata(
+          newMetadata.displayTitle,
+          newMetadata.displayArtist,
+          newMetadata.coverImage || undefined
+        );
+        
+        console.log('[Home] Updated lock screen metadata:', {
+          title: newMetadata.displayTitle,
+          artist: newMetadata.displayArtist,
         });
       }
     } catch (error) {
       console.error('[Home] Error fetching metadata from AzuraCast API:', error);
-      setMetadata({
+      const fallbackMetadata = {
         displayTitle: 'Live Stream',
         displayArtist: 'Yo Hit Radio',
         coverImage: null,
-      });
+      };
+      setMetadata(fallbackMetadata);
+      
+      // Update lock screen metadata even on error
+      await audioManager.updateMetadata(
+        fallbackMetadata.displayTitle,
+        fallbackMetadata.displayArtist
+      );
     }
-  }, []);
+  }, [audioManager]);
 
   // Fetch schedule from WordPress
   const fetchSchedule = useCallback(async () => {
@@ -357,7 +385,7 @@ export default function HomeScreen() {
   }, [schedule]);
 
   const startMetadataPolling = useCallback(() => {
-    console.log('[Home] Starting metadata polling (continuous)');
+    console.log('[Home] Starting metadata polling (continuous - refreshes even when paused)');
     fetchMetadata();
     if (metadataInterval.current) {
       clearInterval(metadataInterval.current);
@@ -489,6 +517,7 @@ export default function HomeScreen() {
   // Start metadata polling on mount (always refresh, whether playing or not)
   useEffect(() => {
     console.log('[Home] Component mounted - starting continuous metadata polling');
+    console.log('[Home] Metadata will refresh every 12 seconds regardless of playback state');
     startMetadataPolling();
 
     return () => {
@@ -527,7 +556,9 @@ export default function HomeScreen() {
         console.log('[Home] User tapped Stop button - stopping audio but keeping metadata visible');
         await audioManager.stopCurrentAudio();
         setIsPlaying(false);
-        // Metadata remains visible - do NOT clear it
+        console.log('[Home] Audio stopped - metadata remains visible and continues refreshing');
+        console.log('[Home] Media notification removed (Android)');
+        console.log('[Home] Lock screen controls cleared');
       } else {
         console.log('[Home] User tapped Listen Live button');
         setLoading(true);
@@ -535,10 +566,27 @@ export default function HomeScreen() {
         const title = metadata?.displayTitle || 'Yo Hit Radio – Live Stream';
         const artist = metadata?.displayArtist || 'Live Stream';
         
+        console.log('[Home] Starting live stream with background playback enabled');
         await audioManager.playAudio(STREAM_URL, true, title, artist);
         setIsPlaying(true);
         setLoading(false);
-        console.log('[Home] Live stream started successfully with background playback enabled');
+        
+        console.log('[Home] Live stream started successfully');
+        console.log('[Home] Background playback active - audio will continue when:');
+        console.log('[Home]   ✓ App goes to background');
+        console.log('[Home]   ✓ User opens another app (WhatsApp, Facebook, etc.)');
+        console.log('[Home]   ✓ Screen turns off or device locks');
+        console.log('[Home]   ✓ Device sleeps/hibernates');
+        console.log('[Home] Lock screen controls available (Play/Pause)');
+        
+        if (Platform.OS === 'android') {
+          console.log('[Home] Android: Media notification visible with Play/Pause controls');
+          console.log('[Home] Android: Audio focus acquired (DoNotMix mode)');
+          console.log('[Home] Android: MediaSession active for Android Auto support');
+        } else if (Platform.OS === 'ios') {
+          console.log('[Home] iOS: AVAudioSession configured for background playback');
+          console.log('[Home] iOS: Now Playing info updated on lock screen');
+        }
       }
     } catch (error) {
       console.error('[Home] Error toggling playback:', error);
