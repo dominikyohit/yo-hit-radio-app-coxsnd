@@ -1,14 +1,14 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
-  Image,
+  FlatList,
   ActivityIndicator,
   RefreshControl,
   ImageSourcePropType,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -68,6 +68,11 @@ interface LiveShowInfo {
 // Day order for grouping
 const DAY_ORDER = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
+// FlatList item types
+type ScheduleItem = 
+  | { type: 'header'; day: string; isToday: boolean }
+  | { type: 'show'; show: Show; dayLowercase: string; isOnAir: boolean; isUpNext: boolean };
+
 export default function ShowsScreen() {
   const [schedule, setSchedule] = useState<DaySchedule[]>([]);
   const [loading, setLoading] = useState(true);
@@ -79,6 +84,9 @@ export default function ShowsScreen() {
     upNextDay: null,
   });
   const [currentDayName, setCurrentDayName] = useState<string>('');
+  const [hasScrolledToLive, setHasScrolledToLive] = useState(false);
+  
+  const flatListRef = useRef<FlatList>(null);
 
   const fetchSchedule = useCallback(async () => {
     console.log('Fetching schedule from WordPress...');
@@ -315,6 +323,64 @@ export default function ShowsScreen() {
     return { onAirShowId, upNextShowId, upNextDay };
   }, []);
 
+  // Auto-scroll to ON AIR NOW or UP NEXT show
+  const scrollToLiveShow = useCallback(() => {
+    if (!flatListRef.current || schedule.length === 0) {
+      return;
+    }
+
+    const targetShowId = currentLiveInfo.onAirShowId || currentLiveInfo.upNextShowId;
+    if (!targetShowId) {
+      console.log('[AutoScroll] No live or upcoming show to scroll to');
+      return;
+    }
+
+    // Build flat list of items to find the index
+    const flatItems: ScheduleItem[] = [];
+    schedule.forEach((daySchedule) => {
+      const isToday = daySchedule.day.toLowerCase() === currentDayName;
+      flatItems.push({ type: 'header', day: daySchedule.day, isToday });
+      
+      daySchedule.shows.forEach((show) => {
+        const dayLowercase = daySchedule.day.toLowerCase();
+        const isOnAir = show.id === currentLiveInfo.onAirShowId;
+        const isUpNext = show.id === currentLiveInfo.upNextShowId && 
+                         dayLowercase === currentLiveInfo.upNextDay;
+        flatItems.push({ type: 'show', show, dayLowercase, isOnAir, isUpNext });
+      });
+    });
+
+    // Find the index of the target show
+    const targetIndex = flatItems.findIndex(
+      (item) => item.type === 'show' && item.show.id === targetShowId
+    );
+
+    if (targetIndex !== -1) {
+      console.log(`[AutoScroll] Scrolling to index ${targetIndex} (show ID: ${targetShowId})`);
+      
+      // Delay scroll to ensure FlatList is fully rendered
+      setTimeout(() => {
+        try {
+          flatListRef.current?.scrollToIndex({
+            index: targetIndex,
+            animated: true,
+            viewPosition: 0.1, // Position near the top (10% from top)
+          });
+          setHasScrolledToLive(true);
+        } catch (err) {
+          console.error('[AutoScroll] Error scrolling to index:', err);
+          // Fallback: scroll to offset
+          flatListRef.current?.scrollToOffset({
+            offset: targetIndex * 100, // Approximate offset
+            animated: true,
+          });
+        }
+      }, 300);
+    } else {
+      console.log('[AutoScroll] Target show not found in flat list');
+    }
+  }, [schedule, currentLiveInfo, currentDayName]);
+
   // Update live info periodically (every 30 seconds) and check for day change
   useEffect(() => {
     if (schedule.length > 0) {
@@ -328,6 +394,7 @@ export default function ShowsScreen() {
         if (todayName !== currentDayName) {
           console.log('Day changed from', currentDayName, 'to', todayName, '- refreshing schedule order');
           setCurrentDayName(todayName);
+          setHasScrolledToLive(false); // Reset scroll flag on day change
           fetchSchedule(); // Refresh schedule to reorder days
         } else {
           // Update live show info
@@ -343,6 +410,14 @@ export default function ShowsScreen() {
     }
   }, [schedule, getLiveShowInfo, currentDayName, fetchSchedule]);
 
+  // Auto-scroll when live info is available and we haven't scrolled yet
+  useEffect(() => {
+    if (schedule.length > 0 && !hasScrolledToLive && (currentLiveInfo.onAirShowId || currentLiveInfo.upNextShowId)) {
+      console.log('[AutoScroll] Triggering auto-scroll to live/upcoming show');
+      scrollToLiveShow();
+    }
+  }, [schedule, currentLiveInfo, hasScrolledToLive, scrollToLiveShow]);
+
   useEffect(() => {
     fetchSchedule();
   }, [fetchSchedule]);
@@ -350,6 +425,7 @@ export default function ShowsScreen() {
   const onRefresh = useCallback(() => {
     console.log('User initiated refresh');
     setRefreshing(true);
+    setHasScrolledToLive(false); // Reset scroll flag on manual refresh
     fetchSchedule();
   }, [fetchSchedule]);
 
@@ -367,6 +443,120 @@ export default function ShowsScreen() {
     };
     return dayMap[normalized] || day;
   };
+
+  // Prepare flat list data
+  const flatListData: ScheduleItem[] = [];
+  schedule.forEach((daySchedule) => {
+    const isToday = daySchedule.day.toLowerCase() === currentDayName;
+    flatListData.push({ type: 'header', day: daySchedule.day, isToday });
+    
+    daySchedule.shows.forEach((show) => {
+      const dayLowercase = daySchedule.day.toLowerCase();
+      const isOnAir = show.id === currentLiveInfo.onAirShowId;
+      const isUpNext = show.id === currentLiveInfo.upNextShowId && 
+                       dayLowercase === currentLiveInfo.upNextDay;
+      flatListData.push({ type: 'show', show, dayLowercase, isOnAir, isUpNext });
+    });
+  });
+
+  const renderItem = ({ item }: { item: ScheduleItem }) => {
+    if (item.type === 'header') {
+      return (
+        <View style={styles.dayHeader}>
+          <Text style={styles.dayTitle}>{item.day}</Text>
+          {item.isToday && (
+            <View style={styles.todayBadge}>
+              <Text style={styles.todayBadgeText}>TODAY</Text>
+            </View>
+          )}
+        </View>
+      );
+    } else {
+      const { show, isOnAir, isUpNext } = item;
+      
+      return (
+        <View
+          style={[
+            styles.showCard,
+            isOnAir && styles.showCardOnAir,
+            isUpNext && !isOnAir && styles.showCardUpNext,
+          ]}
+        >
+          <View style={styles.showImageContainer}>
+            {show.imageUrl ? (
+              <Image
+                source={resolveImageSource(show.imageUrl)}
+                style={styles.showImage}
+                resizeMode="cover"
+              />
+            ) : (
+              <View style={styles.showImagePlaceholder}>
+                <IconSymbol
+                  ios_icon_name="music.note"
+                  android_material_icon_name="music-note"
+                  size={24}
+                  color="#FFD700"
+                />
+              </View>
+            )}
+          </View>
+
+          <View style={styles.showInfo}>
+            <View style={styles.showTitleRow}>
+              <Text style={styles.showTitle} numberOfLines={2}>
+                {show.title}
+              </Text>
+              {isOnAir && (
+                <View style={styles.badgeOnAir}>
+                  <Text style={styles.badgeText}>ON AIR NOW</Text>
+                </View>
+              )}
+              {isUpNext && !isOnAir && (
+                <View style={styles.badgeUpNext}>
+                  <Text style={styles.badgeText}>UP NEXT</Text>
+                </View>
+              )}
+            </View>
+            <View style={styles.timeRow}>
+              <IconSymbol
+                ios_icon_name="clock"
+                android_material_icon_name="access-time"
+                size={14}
+                color="#B8B8B8"
+              />
+              <Text style={styles.timeText}>{show.timeRange}</Text>
+            </View>
+          </View>
+        </View>
+      );
+    }
+  };
+
+  const renderHeader = () => (
+    <View style={styles.header}>
+      <IconSymbol
+        ios_icon_name="calendar"
+        android_material_icon_name="calendar-today"
+        size={32}
+        color="#FFD700"
+      />
+      <Text style={styles.title}>Programming Schedule</Text>
+    </View>
+  );
+
+  const renderEmpty = () => (
+    <View style={styles.emptyContainer}>
+      <IconSymbol
+        ios_icon_name="calendar"
+        android_material_icon_name="calendar-today"
+        size={48}
+        color="#B8B8B8"
+      />
+      <Text style={styles.emptyText}>No shows scheduled</Text>
+    </View>
+  );
+
+  const renderFooter = () => <View style={styles.footer} />;
 
   if (loading) {
     return (
@@ -391,9 +581,22 @@ export default function ShowsScreen() {
           colors={['#1a0033', '#2d1b4e', '#1a0033']}
           style={styles.gradient}
         >
-          <ScrollView
-            style={styles.container}
-            contentContainerStyle={styles.errorContainer}
+          <FlatList
+            data={[]}
+            renderItem={() => null}
+            ListHeaderComponent={
+              <View style={styles.errorContainer}>
+                <IconSymbol
+                  ios_icon_name="exclamationmark.triangle"
+                  android_material_icon_name="error"
+                  size={48}
+                  color="#FFD700"
+                />
+                <Text style={styles.errorTitle}>Unable to Load Schedule</Text>
+                <Text style={styles.errorMessage}>{error}</Text>
+                <Text style={styles.errorHint}>Pull down to retry</Text>
+              </View>
+            }
             refreshControl={
               <RefreshControl
                 refreshing={refreshing}
@@ -402,17 +605,8 @@ export default function ShowsScreen() {
                 colors={['#FFD700']}
               />
             }
-          >
-            <IconSymbol
-              ios_icon_name="exclamationmark.triangle"
-              android_material_icon_name="error"
-              size={48}
-              color="#FFD700"
-            />
-            <Text style={styles.errorTitle}>Unable to Load Schedule</Text>
-            <Text style={styles.errorMessage}>{error}</Text>
-            <Text style={styles.errorHint}>Pull down to retry</Text>
-          </ScrollView>
+            contentContainerStyle={styles.contentContainer}
+          />
         </LinearGradient>
       </SafeAreaView>
     );
@@ -424,8 +618,16 @@ export default function ShowsScreen() {
         colors={['#1a0033', '#2d1b4e', '#1a0033']}
         style={styles.gradient}
       >
-        <ScrollView
-          style={styles.container}
+        <FlatList
+          ref={flatListRef}
+          data={flatListData}
+          renderItem={renderItem}
+          keyExtractor={(item, index) => 
+            item.type === 'header' ? `header-${item.day}` : `show-${item.show.id}-${index}`
+          }
+          ListHeaderComponent={renderHeader}
+          ListEmptyComponent={renderEmpty}
+          ListFooterComponent={renderFooter}
           contentContainerStyle={styles.contentContainer}
           showsVerticalScrollIndicator={false}
           refreshControl={
@@ -436,113 +638,17 @@ export default function ShowsScreen() {
               colors={['#FFD700']}
             />
           }
-        >
-          <View style={styles.header}>
-            <IconSymbol
-              ios_icon_name="calendar"
-              android_material_icon_name="calendar-today"
-              size={32}
-              color="#FFD700"
-            />
-            <Text style={styles.title}>Programming Schedule</Text>
-          </View>
-
-          {schedule.length === 0 ? (
-            <View style={styles.emptyContainer}>
-              <IconSymbol
-                ios_icon_name="calendar"
-                android_material_icon_name="calendar-today"
-                size={48}
-                color="#B8B8B8"
-              />
-              <Text style={styles.emptyText}>No shows scheduled</Text>
-            </View>
-          ) : (
-            schedule.map((daySchedule, dayIndex) => {
-              const isCurrentDay = daySchedule.day.toLowerCase() === currentDayName;
-              const dayLowercase = daySchedule.day.toLowerCase();
-
-              return (
-                <View key={dayIndex} style={styles.daySection}>
-                  <View style={styles.dayHeader}>
-                    <Text style={styles.dayTitle}>{daySchedule.day}</Text>
-                    {isCurrentDay && (
-                      <View style={styles.todayBadge}>
-                        <Text style={styles.todayBadgeText}>TODAY</Text>
-                      </View>
-                    )}
-                  </View>
-
-                  {daySchedule.shows.map((show, showIndex) => {
-                    // Determine if this show should have ON AIR NOW or UP NEXT badge
-                    const isOnAir = show.id === currentLiveInfo.onAirShowId;
-                    const isUpNext = show.id === currentLiveInfo.upNextShowId && 
-                                     dayLowercase === currentLiveInfo.upNextDay;
-
-                    return (
-                      <View
-                        key={showIndex}
-                        style={[
-                          styles.showCard,
-                          isOnAir && styles.showCardOnAir,
-                          isUpNext && styles.showCardUpNext,
-                        ]}
-                      >
-                        <View style={styles.showImageContainer}>
-                          {show.imageUrl ? (
-                            <Image
-                              source={resolveImageSource(show.imageUrl)}
-                              style={styles.showImage}
-                              resizeMode="cover"
-                            />
-                          ) : (
-                            <View style={styles.showImagePlaceholder}>
-                              <IconSymbol
-                                ios_icon_name="music.note"
-                                android_material_icon_name="music-note"
-                                size={24}
-                                color="#FFD700"
-                              />
-                            </View>
-                          )}
-                        </View>
-
-                        <View style={styles.showInfo}>
-                          <View style={styles.showTitleRow}>
-                            <Text style={styles.showTitle} numberOfLines={2}>
-                              {show.title}
-                            </Text>
-                            {isOnAir && (
-                              <View style={styles.badgeOnAir}>
-                                <Text style={styles.badgeText}>ON AIR NOW</Text>
-                              </View>
-                            )}
-                            {isUpNext && !isOnAir && (
-                              <View style={styles.badgeUpNext}>
-                                <Text style={styles.badgeText}>UP NEXT</Text>
-                              </View>
-                            )}
-                          </View>
-                          <View style={styles.timeRow}>
-                            <IconSymbol
-                              ios_icon_name="clock"
-                              android_material_icon_name="access-time"
-                              size={14}
-                              color="#B8B8B8"
-                            />
-                            <Text style={styles.timeText}>{show.timeRange}</Text>
-                          </View>
-                        </View>
-                      </View>
-                    );
-                  })}
-                </View>
-              );
-            })
-          )}
-
-          <View style={styles.footer} />
-        </ScrollView>
+          onScrollToIndexFailed={(info) => {
+            console.warn('[AutoScroll] scrollToIndex failed:', info);
+            // Fallback: scroll to offset
+            setTimeout(() => {
+              flatListRef.current?.scrollToOffset({
+                offset: info.averageItemLength * info.index,
+                animated: true,
+              });
+            }, 100);
+          }}
+        />
       </LinearGradient>
     </SafeAreaView>
   );
@@ -554,9 +660,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#1a0033',
   },
   gradient: {
-    flex: 1,
-  },
-  container: {
     flex: 1,
   },
   contentContainer: {
@@ -574,12 +677,10 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#FFFFFF',
   },
-  daySection: {
-    marginBottom: 28,
-  },
   dayHeader: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginTop: 16,
     marginBottom: 14,
     paddingBottom: 10,
     borderBottomWidth: 2,
@@ -721,6 +822,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 40,
     gap: 16,
+    minHeight: 400,
   },
   errorTitle: {
     fontSize: 20,
