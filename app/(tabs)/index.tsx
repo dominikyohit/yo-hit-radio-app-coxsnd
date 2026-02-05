@@ -25,12 +25,12 @@ import Animated, {
   Easing,
 } from 'react-native-reanimated';
 import AudioManager from '@/utils/audioManager';
-import { getZenoMetadata, ZenoMetadata } from '@/utils/zenoMetadata';
 import { parseEventDate, formatDateBadge } from '@/utils/dateHelpers';
 import { decodeHtmlEntities } from '@/utils/htmlDecoder';
 
-const STREAM_URL = 'https://stream.zeno.fm/hmc38shnrwzuv';
-const METADATA_POLL_INTERVAL = 12000; // 12 seconds - polls Zeno Metadata API every 12 seconds while playing
+const STREAM_URL = 'https://a13.asurahosting.com/listen/yo_hit_radio/radio.mp3';
+const METADATA_POLL_INTERVAL = 12000; // 12 seconds - polls AzuraCast API every 12 seconds while playing
+const AZURACAST_API_URL = 'https://a13.asurahosting.com/api/nowplaying/yo_hit_radio';
 const WORDPRESS_SCHEDULE_URL = 'https://yohitradio.com/wp-json/wp/v2/calendrier?per_page=100&_embed';
 
 interface Show {
@@ -43,6 +43,13 @@ interface Show {
 
 interface Schedule {
   [day: string]: Show[];
+}
+
+// AzuraCast metadata interface
+interface AzuraCastMetadata {
+  displayTitle: string;
+  displayArtist: string;
+  coverImage: string | null;
 }
 
 // Preview data interfaces
@@ -192,7 +199,7 @@ function resolveImageSource(source: string | number | ImageSourcePropType | unde
 
 export default function HomeScreen() {
   const [isPlaying, setIsPlaying] = useState(false);
-  const [metadata, setMetadata] = useState<ZenoMetadata | null>(null);
+  const [metadata, setMetadata] = useState<AzuraCastMetadata | null>(null);
   const [loading, setLoading] = useState(false);
   const [currentShow, setCurrentShow] = useState<Show | null>(null);
   const [nextShow, setNextShow] = useState<Show | null>(null);
@@ -227,13 +234,40 @@ export default function HomeScreen() {
   }, [isPlaying, rotation]);
 
   const fetchMetadata = useCallback(async () => {
-    console.log('[Home] Fetching metadata from Zeno API... (isPlaying:', isPlaying, ')');
+    console.log('[Home] Fetching metadata from AzuraCast API... (isPlaying:', isPlaying, ')');
     try {
-      const data = await getZenoMetadata();
-      console.log('[Home] Fetched metadata from Zeno API:', data);
-      setMetadata(data);
+      const response = await fetch(AZURACAST_API_URL);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const data = await response.json();
+      console.log('[Home] Fetched metadata from AzuraCast API:', data);
+
+      const title = data?.now_playing?.song?.title || '';
+      const artist = data?.now_playing?.song?.artist || '';
+      const cover = data?.now_playing?.song?.art || '';
+
+      // Fallback for missing title/artist
+      if (!title && !artist) {
+        setMetadata({
+          displayTitle: 'Live Stream',
+          displayArtist: 'Yo Hit Radio',
+          coverImage: null,
+        });
+      } else {
+        setMetadata({
+          displayTitle: title,
+          displayArtist: artist,
+          coverImage: cover || null,
+        });
+      }
     } catch (error) {
-      console.error('[Home] Error fetching metadata from Zeno API:', error);
+      console.error('[Home] Error fetching metadata from AzuraCast API:', error);
+      setMetadata({
+        displayTitle: 'Live Stream',
+        displayArtist: 'Yo Hit Radio',
+        coverImage: null,
+      });
     }
   }, [isPlaying]);
 
@@ -567,25 +601,10 @@ export default function HomeScreen() {
   };
 
   // Parse metadata with proper fallbacks
-  // Format: "Now Playing: Artist – Title" or "Live Stream – Yo Hit Radio"
-  let nowPlayingText = '';
-  if (metadata && (metadata.displayTitle || metadata.displayArtist)) {
-    const artist = metadata.displayArtist || '';
-    const title = metadata.displayTitle || '';
-    
-    if (artist && title) {
-      nowPlayingText = `${artist} – ${title}`;
-    } else if (title) {
-      nowPlayingText = title;
-    } else if (artist) {
-      nowPlayingText = artist;
-    } else {
-      nowPlayingText = 'Live Stream – Yo Hit Radio';
-    }
-  } else {
-    nowPlayingText = 'Live Stream – Yo Hit Radio';
-  }
-  
+  // Format: "Title – Artist" or "Live Stream – Yo Hit Radio"
+  const displayTitle = metadata?.displayTitle || 'Live Stream';
+  const displayArtist = metadata?.displayArtist || 'Yo Hit Radio';
+  const nowPlayingText = `${displayTitle} – ${displayArtist}`;
   const displayArtwork = metadata?.coverImage;
 
   return (
@@ -615,14 +634,10 @@ export default function HomeScreen() {
               </Animated.View>
             ) : (
               <Animated.View style={[styles.coverImageContainer, animatedStyle]}>
-                <View style={styles.placeholderCover}>
-                  <IconSymbol
-                    ios_icon_name="music.note"
-                    android_material_icon_name="music-note"
-                    size={64}
-                    color="#FFD700"
-                  />
-                </View>
+                <Image
+                  source={require('@/assets/images/final_quest_240x240.png')}
+                  style={styles.coverImage}
+                />
               </Animated.View>
             )}
             <Text style={styles.songTitle} numberOfLines={2}>
