@@ -234,7 +234,7 @@ export default function HomeScreen() {
   }, [isPlaying, rotation]);
 
   const fetchMetadata = useCallback(async () => {
-    console.log('[Home] Fetching metadata from AzuraCast API... (isPlaying:', isPlaying, ')');
+    console.log('[Home] Fetching metadata from AzuraCast API...');
     try {
       const response = await fetch(AZURACAST_API_URL);
       if (!response.ok) {
@@ -269,7 +269,7 @@ export default function HomeScreen() {
         coverImage: null,
       });
     }
-  }, [isPlaying]);
+  }, []);
 
   // Fetch schedule from WordPress
   const fetchSchedule = useCallback(async () => {
@@ -357,8 +357,12 @@ export default function HomeScreen() {
   }, [schedule]);
 
   const startMetadataPolling = useCallback(() => {
-    console.log('[Home] Starting metadata polling');
+    console.log('[Home] Starting metadata polling (continuous)');
     fetchMetadata();
+    if (metadataInterval.current) {
+      clearInterval(metadataInterval.current);
+    }
+    metadataInterval.current = setInterval(fetchMetadata, METADATA_POLL_INTERVAL);
   }, [fetchMetadata]);
 
   const stopMetadataPolling = useCallback(() => {
@@ -367,7 +371,7 @@ export default function HomeScreen() {
       clearInterval(metadataInterval.current);
       metadataInterval.current = null;
     }
-    setMetadata(null);
+    // DO NOT clear metadata - keep it visible
   }, []);
 
   // Fetch preview data for all 3 sections
@@ -482,20 +486,16 @@ export default function HomeScreen() {
     setLoadingPreviews(false);
   }, []);
 
+  // Start metadata polling on mount (always refresh, whether playing or not)
   useEffect(() => {
-    console.log('[Home] isPlaying changed to:', isPlaying);
-    
-    if (isPlaying) {
-      startMetadataPolling();
-      metadataInterval.current = setInterval(fetchMetadata, METADATA_POLL_INTERVAL);
-    } else {
-      stopMetadataPolling();
-    }
+    console.log('[Home] Component mounted - starting continuous metadata polling');
+    startMetadataPolling();
 
     return () => {
+      console.log('[Home] Component unmounting - stopping metadata polling');
       stopMetadataPolling();
     };
-  }, [isPlaying, startMetadataPolling, stopMetadataPolling, fetchMetadata]);
+  }, [startMetadataPolling, stopMetadataPolling]);
 
   // Fetch schedule on mount
   useEffect(() => {
@@ -524,9 +524,10 @@ export default function HomeScreen() {
   const togglePlayback = async () => {
     try {
       if (isPlaying) {
-        console.log('[Home] User tapped Stop button');
+        console.log('[Home] User tapped Stop button - stopping audio but keeping metadata visible');
         await audioManager.stopCurrentAudio();
         setIsPlaying(false);
+        // Metadata remains visible - do NOT clear it
       } else {
         console.log('[Home] User tapped Listen Live button');
         setLoading(true);
