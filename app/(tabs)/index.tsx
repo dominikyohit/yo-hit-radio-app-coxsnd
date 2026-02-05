@@ -600,11 +600,9 @@ export default function HomeScreen() {
     }
   };
 
-  // Parse metadata with proper fallbacks
-  // Format: "Title – Artist" or "Live Stream – Yo Hit Radio"
+  // Parse metadata with proper fallbacks - ATOMIC JSX RULES
   const displayTitle = metadata?.displayTitle || 'Live Stream';
   const displayArtist = metadata?.displayArtist || 'Yo Hit Radio';
-  const nowPlayingText = `${displayTitle} – ${displayArtist}`;
   const displayArtwork = metadata?.coverImage;
 
   return (
@@ -641,7 +639,10 @@ export default function HomeScreen() {
               </Animated.View>
             )}
             <Text style={styles.songTitle} numberOfLines={2}>
-              {nowPlayingText}
+              {displayTitle}
+            </Text>
+            <Text style={styles.artistName} numberOfLines={1}>
+              {displayArtist}
             </Text>
           </View>
 
@@ -1049,14 +1050,14 @@ const styles = StyleSheet.create({
   },
   songTitle: {
     color: '#FFFFFF',
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: 'bold',
     textAlign: 'center',
-    marginBottom: 5,
+    marginBottom: 6,
   },
   artistName: {
     color: '#CCCCCC',
-    fontSize: 14,
+    fontSize: 15,
     textAlign: 'center',
   },
   listenLiveButton: {
