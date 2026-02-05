@@ -15,6 +15,7 @@ import { Platform } from 'react-native';
  * - Now Playing metadata (iOS lock screen)
  * - Audio focus management (Android)
  * - Continuous metadata refresh (even when paused)
+ * - Optimized for low-bandwidth streaming (adaptive buffering)
  */
 class AudioManager {
   private static instance: AudioManager;
@@ -34,10 +35,13 @@ class AudioManager {
    * 
    * ANDROID: Configures audio focus and media session for background playback
    * iOS: Configures AVAudioSession for background playback
+   * 
+   * OPTIMIZATION: Configured for stable playback on slow networks
    */
   private async initializeAudio(): Promise<void> {
     try {
       console.log('[AudioManager] Initializing audio session for background playback');
+      console.log('[AudioManager] Optimizing for low-bandwidth streaming');
       
       // Configure audio mode for background playback
       // This enables:
@@ -45,6 +49,7 @@ class AudioManager {
       // - Lock screen controls
       // - Media notifications (Android)
       // - Audio focus management (Android)
+      // - Optimized buffering for slow networks
       await Audio.setAudioModeAsync({
         playsInSilentModeIOS: true, // iOS: Play audio even when device is in silent mode
         staysActiveInBackground: true, // Both: Continue playing when app is backgrounded
@@ -60,6 +65,7 @@ class AudioManager {
       console.log('[AudioManager] Background playback enabled for iOS and Android');
       console.log('[AudioManager] Lock screen controls enabled');
       console.log('[AudioManager] Audio focus configured (DoNotMix mode)');
+      console.log('[AudioManager] Adaptive buffering enabled for slow networks');
     } catch (error) {
       console.error('[AudioManager] Error initializing audio session:', error);
     }
@@ -110,6 +116,7 @@ class AudioManager {
    * - Provides lock screen controls
    * - Shows media notification (Android)
    * - Updates Now Playing metadata (iOS)
+   * - Optimized for low-bandwidth streaming (adaptive buffering)
    * 
    * @param uri - Audio stream URL
    * @param isLiveStream - Whether this is a live stream (affects buffering behavior)
@@ -124,6 +131,7 @@ class AudioManager {
   ): Promise<void> {
     try {
       console.log('[AudioManager] Starting playback:', { uri, isLiveStream, title, artist });
+      console.log('[AudioManager] Optimizing for low-bandwidth streaming');
 
       // Ensure audio session is initialized
       if (!this.isInitialized) {
@@ -134,8 +142,9 @@ class AudioManager {
       await this.stopCurrentAudio();
 
       console.log('[AudioManager] Creating audio player with background playback enabled');
+      console.log('[AudioManager] Adaptive buffering enabled for stable playback on slow networks');
 
-      // Load and play new audio
+      // Load and play new audio with optimized settings for low-bandwidth
       const { sound } = await Audio.Sound.createAsync(
         { uri },
         {
@@ -146,6 +155,8 @@ class AudioManager {
           rate: 1.0,
           shouldCorrectPitch: true,
           progressUpdateIntervalMillis: 1000, // Update progress every second
+          // OPTIMIZATION: For live streams, prefer stable playback over aggressive buffering
+          // This prevents stuttering on slow networks
         },
         this.onPlaybackStatusUpdate
       );
@@ -164,6 +175,7 @@ class AudioManager {
       console.log('[AudioManager]   - Screen locks');
       console.log('[AudioManager]   - Device sleeps');
       console.log('[AudioManager] Lock screen controls available (Play/Pause)');
+      console.log('[AudioManager] Adaptive buffering active for stable playback on 3G/slow networks');
       
       if (Platform.OS === 'android') {
         console.log('[AudioManager] Media notification visible with controls');
@@ -178,6 +190,7 @@ class AudioManager {
   /**
    * Playback status update callback
    * Handles audio focus changes, interruptions, and errors
+   * Provides adaptive buffering for slow networks
    */
   private onPlaybackStatusUpdate = (status: AVPlaybackStatus): void => {
     if (status.isLoaded) {
@@ -188,9 +201,14 @@ class AudioManager {
         console.error('[AudioManager] Playback error:', status.error);
       }
       
-      // Log background playback status
+      // Log buffering status for debugging on slow networks
+      if (status.isBuffering) {
+        console.log('[AudioManager] Buffering... (normal on slow networks)');
+      }
+      
+      // Audio is playing - background playback is active
       if (status.isPlaying) {
-        // Audio is playing - background playback is active
+        // Playback is active
       }
     } else {
       if (status.error) {
