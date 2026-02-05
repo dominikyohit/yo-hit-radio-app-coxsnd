@@ -78,6 +78,7 @@ export default function ShowsScreen() {
     upNextShowId: null,
     upNextDay: null,
   });
+  const [currentDayName, setCurrentDayName] = useState<string>('');
 
   const fetchSchedule = useCallback(async () => {
     console.log('Fetching schedule from WordPress...');
@@ -141,12 +142,31 @@ export default function ShowsScreen() {
         });
       });
 
-      // Create ordered schedule array
-      const orderedSchedule: DaySchedule[] = DAY_ORDER.map((day) => ({
-        day,
-        shows: grouped[day] || [],
-      })).filter((daySchedule) => daySchedule.shows.length > 0);
+      // Get current day name
+      const now = new Date();
+      const currentDayIndex = now.getDay(); // 0 for Sunday, 1 for Monday, etc.
+      const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      const todayName = daysOfWeek[currentDayIndex];
+      setCurrentDayName(todayName.toLowerCase());
 
+      // Create ordered schedule array starting with current day
+      // Example: If today is Thursday, order is: Thursday, Friday, Saturday, Sunday, Monday, Tuesday, Wednesday
+      const todayIndex = DAY_ORDER.indexOf(todayName);
+      const reorderedDays: string[] = [];
+      
+      for (let i = 0; i < DAY_ORDER.length; i++) {
+        const dayIndex = (todayIndex + i) % DAY_ORDER.length;
+        reorderedDays.push(DAY_ORDER[dayIndex]);
+      }
+
+      const orderedSchedule: DaySchedule[] = reorderedDays
+        .map((day) => ({
+          day,
+          shows: grouped[day] || [],
+        }))
+        .filter((daySchedule) => daySchedule.shows.length > 0);
+
+      console.log('Schedule order:', orderedSchedule.map(ds => ds.day).join(', '));
       setSchedule(orderedSchedule);
       setError(null);
       console.log('Schedule loaded successfully');
@@ -160,7 +180,7 @@ export default function ShowsScreen() {
     }
   }, []);
 
-  // Determine ON AIR NOW and UP NEXT shows
+  // Determine ON AIR NOW and UP NEXT shows (only for current day)
   const getLiveShowInfo = useCallback((scheduleData: DaySchedule[]): LiveShowInfo => {
     const now = new Date();
     const currentDayIndex = now.getDay(); // 0 for Sunday, 1 for Monday, etc.
@@ -200,6 +220,7 @@ export default function ShowsScreen() {
           // Current time is before this show, and we haven't found UP NEXT yet
           upNextShowId = show.id;
           upNextDay = currentDayName;
+          break;
         }
       }
     }
@@ -224,12 +245,25 @@ export default function ShowsScreen() {
     return { onAirShowId, upNextShowId, upNextDay };
   }, []);
 
-  // Update live info periodically
+  // Update live info periodically and check for day change
   useEffect(() => {
     if (schedule.length > 0) {
       const updateLiveInfo = () => {
-        const liveInfo = getLiveShowInfo(schedule);
-        setCurrentLiveInfo(liveInfo);
+        const now = new Date();
+        const currentDayIndex = now.getDay();
+        const daysOfWeek = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+        const todayName = daysOfWeek[currentDayIndex];
+
+        // Check if day has changed
+        if (todayName !== currentDayName) {
+          console.log('Day changed from', currentDayName, 'to', todayName, '- refreshing schedule order');
+          setCurrentDayName(todayName);
+          fetchSchedule(); // Refresh schedule to reorder days
+        } else {
+          // Update live show info
+          const liveInfo = getLiveShowInfo(schedule);
+          setCurrentLiveInfo(liveInfo);
+        }
       };
 
       updateLiveInfo(); // Initial update
@@ -237,7 +271,7 @@ export default function ShowsScreen() {
 
       return () => clearInterval(interval);
     }
-  }, [schedule, getLiveShowInfo]);
+  }, [schedule, getLiveShowInfo, currentDayName, fetchSchedule]);
 
   useEffect(() => {
     fetchSchedule();
@@ -354,75 +388,85 @@ export default function ShowsScreen() {
               <Text style={styles.emptyText}>No shows scheduled</Text>
             </View>
           ) : (
-            schedule.map((daySchedule, dayIndex) => (
-              <View key={dayIndex} style={styles.daySection}>
-                <View style={styles.dayHeader}>
-                  <Text style={styles.dayTitle}>{daySchedule.day}</Text>
-                </View>
+            schedule.map((daySchedule, dayIndex) => {
+              const isCurrentDay = daySchedule.day.toLowerCase() === currentDayName;
 
-                {daySchedule.shows.map((show, showIndex) => {
-                  const isOnAir = show.id === currentLiveInfo.onAirShowId;
-                  const isUpNext = show.id === currentLiveInfo.upNextShowId;
+              return (
+                <View key={dayIndex} style={styles.daySection}>
+                  <View style={styles.dayHeader}>
+                    <Text style={styles.dayTitle}>{daySchedule.day}</Text>
+                    {isCurrentDay && (
+                      <View style={styles.todayBadge}>
+                        <Text style={styles.todayBadgeText}>TODAY</Text>
+                      </View>
+                    )}
+                  </View>
 
-                  return (
-                    <View
-                      key={showIndex}
-                      style={[
-                        styles.showCard,
-                        isOnAir && styles.showCardOnAir,
-                        isUpNext && styles.showCardUpNext,
-                      ]}
-                    >
-                      <View style={styles.showImageContainer}>
-                        {show.imageUrl ? (
-                          <Image
-                            source={resolveImageSource(show.imageUrl)}
-                            style={styles.showImage}
-                            resizeMode="cover"
-                          />
-                        ) : (
-                          <View style={styles.showImagePlaceholder}>
-                            <IconSymbol
-                              ios_icon_name="music.note"
-                              android_material_icon_name="music-note"
-                              size={24}
-                              color="#FFD700"
+                  {daySchedule.shows.map((show, showIndex) => {
+                    // Only show badges for current day
+                    const isOnAir = isCurrentDay && show.id === currentLiveInfo.onAirShowId;
+                    const isUpNext = isCurrentDay && show.id === currentLiveInfo.upNextShowId;
+
+                    return (
+                      <View
+                        key={showIndex}
+                        style={[
+                          styles.showCard,
+                          isOnAir && styles.showCardOnAir,
+                          isUpNext && styles.showCardUpNext,
+                        ]}
+                      >
+                        <View style={styles.showImageContainer}>
+                          {show.imageUrl ? (
+                            <Image
+                              source={resolveImageSource(show.imageUrl)}
+                              style={styles.showImage}
+                              resizeMode="cover"
                             />
-                          </View>
-                        )}
-                      </View>
+                          ) : (
+                            <View style={styles.showImagePlaceholder}>
+                              <IconSymbol
+                                ios_icon_name="music.note"
+                                android_material_icon_name="music-note"
+                                size={24}
+                                color="#FFD700"
+                              />
+                            </View>
+                          )}
+                        </View>
 
-                      <View style={styles.showInfo}>
-                        <View style={styles.showTitleRow}>
-                          <Text style={styles.showTitle} numberOfLines={2}>
-                            {show.title}
-                          </Text>
-                          {isOnAir && (
-                            <View style={styles.badgeOnAir}>
-                              <Text style={styles.badgeText}>ON AIR NOW</Text>
-                            </View>
-                          )}
-                          {isUpNext && !isOnAir && (
-                            <View style={styles.badgeUpNext}>
-                              <Text style={styles.badgeText}>UP NEXT</Text>
-                            </View>
-                          )}
-                        </View>
-                        <View style={styles.timeRow}>
-                          <IconSymbol
-                            ios_icon_name="clock"
-                            android_material_icon_name="access-time"
-                            size={14}
-                            color="#B8B8B8"
-                          />
-                          <Text style={styles.timeText}>{show.timeRange}</Text>
+                        <View style={styles.showInfo}>
+                          <View style={styles.showTitleRow}>
+                            <Text style={styles.showTitle} numberOfLines={2}>
+                              {show.title}
+                            </Text>
+                            {isOnAir && (
+                              <View style={styles.badgeOnAir}>
+                                <Text style={styles.badgeText}>ON AIR NOW</Text>
+                              </View>
+                            )}
+                            {isUpNext && !isOnAir && (
+                              <View style={styles.badgeUpNext}>
+                                <Text style={styles.badgeText}>UP NEXT</Text>
+                              </View>
+                            )}
+                          </View>
+                          <View style={styles.timeRow}>
+                            <IconSymbol
+                              ios_icon_name="clock"
+                              android_material_icon_name="access-time"
+                              size={14}
+                              color="#B8B8B8"
+                            />
+                            <Text style={styles.timeText}>{show.timeRange}</Text>
+                          </View>
                         </View>
                       </View>
-                    </View>
-                  );
-                })}
-              </View>
-            ))
+                    );
+                  })}
+                </View>
+              );
+            })
           )}
 
           <View style={styles.footer} />
@@ -462,15 +506,30 @@ const styles = StyleSheet.create({
     marginBottom: 28,
   },
   dayHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: 14,
     paddingBottom: 10,
     borderBottomWidth: 2,
     borderBottomColor: '#FFD700',
+    gap: 10,
   },
   dayTitle: {
     fontSize: 22,
     fontWeight: '700',
     color: '#FFD700',
+  },
+  todayBadge: {
+    backgroundColor: '#FFD700',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  todayBadgeText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#1a0033',
+    letterSpacing: 0.5,
   },
   showCard: {
     flexDirection: 'row',
