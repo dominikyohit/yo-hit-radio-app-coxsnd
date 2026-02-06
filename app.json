@@ -1,0 +1,59 @@
+{
+  "expo": {
+    "name": "Yo Hit Radio",
+    "slug": "Yo Hit Radio",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/logo 192 (1).png",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/images/logo 192 (1).png",
+      "resizeMode": "contain",
+      "backgroundColor": "#000000"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.anonymous.Natively",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "UIBackgroundModes": [
+          "audio"
+        ]
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/logo 192 (1).png",
+        "backgroundColor": "#000000"
+      },
+      "edgeToEdgeEnabled": true,
+      "package": "com.yohitradio.app",
+      "googleServicesFile": "./google-services.json"
+    },
+    "web": {
+      "favicon": "./assets/images/final_quest_240x240.png",
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-font",
+      "expo-router",
+      "expo-web-browser",
+      [
+        "onesignal-expo-plugin",
+        {
+          "mode": "development"
+        }
+      ]
+    ],
+    "scheme": "Yo Hit Radio",
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "backendUrl": "https://3xedeh9y77sk8qu3xzuw6cfa4n5b92rj.app.specular.dev",
+      "oneSignalAppId": "41c0200e-69a3-4e4d-bc0d-0a53d0f6e65a"
+    }
+  }
+}
