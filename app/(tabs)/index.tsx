@@ -17,6 +17,7 @@ import { decodeHtmlEntities } from '@/utils/htmlDecoder';
 import { OptimizedImage } from '@/components/OptimizedImage';
 import { fetchWithTimeout, isNetworkError } from '@/utils/networkHelpers';
 import { saveMetadataCache, loadMetadataCache } from '@/utils/metadataCache';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   View,
   Text,
@@ -28,6 +29,7 @@ import {
   Platform,
   ActivityIndicator,
   ImageSourcePropType,
+  RefreshControl,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 
@@ -140,6 +142,12 @@ const METADATA_POLL_INTERVAL = 12000; // 12 seconds - polls AzuraCast API every 
 const AZURACAST_API_URL = 'https://a13.asurahosting.com/api/nowplaying/yo_hit_radio';
 const WORDPRESS_SCHEDULE_URL = 'https://yohitradio.com/wp-json/wp/v2/calendrier?per_page=100&_embed';
 
+// Cache keys for AsyncStorage
+const CACHE_KEY_EVENTS = '@home_preview_events';
+const CACHE_KEY_NEWS = '@home_preview_news';
+const CACHE_KEY_RELEASES = '@home_preview_releases';
+const CACHE_KEY_SCHEDULE = '@home_schedule';
+
 // Function to get current and next shows from WordPress schedule
 const getCurrentAndNextShows = (schedule: Schedule): { currentShow: Show | null; nextShow: Show | null } => {
   const now = new Date();
@@ -212,7 +220,14 @@ export default function HomeScreen() {
   const [previewEvents, setPreviewEvents] = useState<PreviewEvent[]>([]);
   const [previewNews, setPreviewNews] = useState<PreviewArticle[]>([]);
   const [previewReleases, setPreviewReleases] = useState<PreviewRelease[]>([]);
-  const [loadingPreviews, setLoadingPreviews] = useState(true);
+  const [loadingPreviews, setLoadingPreviews] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  
+  // Track if data has been fetched (for caching logic)
+  const hasFetchedEvents = useRef(false);
+  const hasFetchedNews = useRef(false);
+  const hasFetchedReleases = useRef(false);
+  const hasFetchedSchedule = useRef(false);
   
   const metadataInterval = useRef<NodeJS.Timeout | null>(null);
   const showUpdateInterval = useRef<NodeJS.Timeout | null>(null);
@@ -281,8 +296,8 @@ export default function HomeScreen() {
         // Save to cache for instant display on next load
         await saveMetadataCache(newMetadata);
         
-        // Update lock screen metadata even when paused
-        // This ensures Now Playing info stays current
+        // CRITICAL: Update lock screen metadata even when paused
+        // This ensures Now Playing info stays current (METADATA RULE)
         await audioManager.updateMetadata(
           newMetadata.displayTitle,
           newMetadata.displayArtist,
@@ -321,10 +336,26 @@ export default function HomeScreen() {
     }
   }, [audioManager, metadata]);
 
-  // Fetch schedule from WordPress
-  const fetchSchedule = useCallback(async () => {
+  // Fetch schedule from WordPress with caching
+  const fetchSchedule = useCallback(async (forceRefresh: boolean = false) => {
+    // If already fetched and not forcing refresh, skip
+    if (hasFetchedSchedule.current && !forceRefresh) {
+      console.log('[Home] Schedule already fetched - using cached data');
+      return;
+    }
+
     console.log('[Home] Fetching schedule from WordPress...');
     try {
+      // Try to load from cache first
+      if (!forceRefresh) {
+        const cached = await AsyncStorage.getItem(CACHE_KEY_SCHEDULE);
+        if (cached) {
+          const cachedSchedule = JSON.parse(cached);
+          setSchedule(cachedSchedule);
+          console.log('[Home] Loaded schedule from cache');
+        }
+      }
+
       // Use fetchWithTimeout for network resilience
       const response = await fetchWithTimeout(
         WORDPRESS_SCHEDULE_URL,
@@ -396,7 +427,12 @@ export default function HomeScreen() {
       });
 
       setSchedule(grouped);
-      console.log('[Home] Schedule loaded successfully');
+      hasFetchedSchedule.current = true;
+      
+      // Save to cache
+      await AsyncStorage.setItem(CACHE_KEY_SCHEDULE, JSON.stringify(grouped));
+      
+      console.log('[Home] Schedule loaded and cached successfully');
     } catch (error) {
       console.error('[Home] Error fetching schedule:', error);
       // Don't clear existing schedule on error - keep it visible
@@ -413,151 +449,212 @@ export default function HomeScreen() {
     setNextShow(next);
   }, [schedule]);
 
-  const startMetadataPolling = useCallback(() => {
-    console.log('[Home] Starting metadata polling (continuous - refreshes even when paused)');
-    fetchMetadata();
-    if (metadataInterval.current) {
-      clearInterval(metadataInterval.current);
+  // Fetch preview data with caching
+  const fetchPreviewData = useCallback(async (forceRefresh: boolean = false) => {
+    // If already fetched and not forcing refresh, skip
+    if (hasFetchedEvents.current && hasFetchedNews.current && hasFetchedReleases.current && !forceRefresh) {
+      console.log('[Home] Preview data already fetched - using cached data');
+      return;
     }
-    metadataInterval.current = setInterval(fetchMetadata, METADATA_POLL_INTERVAL);
-  }, [fetchMetadata]);
 
-  const stopMetadataPolling = useCallback(() => {
-    console.log('[Home] Stopping metadata polling');
-    if (metadataInterval.current) {
-      clearInterval(metadataInterval.current);
-      metadataInterval.current = null;
-    }
-    // DO NOT clear metadata - keep it visible
-  }, []);
-
-  // Fetch preview data for all 3 sections
-  const fetchPreviewData = useCallback(async () => {
     console.log('[Home] Fetching preview data for Events, News, and Releases');
-    setLoadingPreviews(true);
+    if (!forceRefresh) {
+      setLoadingPreviews(true);
+    }
     
-    try {
-      // Fetch Events (2 upcoming) with timeout
-      const eventsResponse = await fetchWithTimeout(
-        'https://yohitradio.com/wp-json/wp/v2/bal?_embed&per_page=100',
-        {},
-        { timeout: 10000, retries: 1, retryDelay: 1000 }
-      );
-      
-      const eventsData: WordPressEvent[] = await eventsResponse.json();
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      
-      const upcomingEvents: PreviewEvent[] = eventsData
-        .map((event) => {
-          const eventDate = parseEventDate(event.acf?.event_date);
-          const decodedTitle = decodeHtmlEntities(event.title.rendered);
+    // EVENTS
+    if (!hasFetchedEvents.current || forceRefresh) {
+      try {
+        // Try to load from cache first
+        if (!forceRefresh) {
+          const cached = await AsyncStorage.getItem(CACHE_KEY_EVENTS);
+          if (cached) {
+            const cachedEvents = JSON.parse(cached);
+            setPreviewEvents(cachedEvents);
+            console.log('[Home] Loaded events from cache');
+          }
+        }
+
+        // Fetch Events (2 upcoming) with timeout
+        const eventsResponse = await fetchWithTimeout(
+          'https://yohitradio.com/wp-json/wp/v2/bal?_embed&per_page=100',
+          {},
+          { timeout: 10000, retries: 1, retryDelay: 1000 }
+        );
+        
+        const eventsData: WordPressEvent[] = await eventsResponse.json();
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        
+        const upcomingEvents: PreviewEvent[] = eventsData
+          .map((event) => {
+            const eventDate = parseEventDate(event.acf?.event_date);
+            const decodedTitle = decodeHtmlEntities(event.title.rendered);
+            
+            return {
+              id: String(event.id),
+              title: decodedTitle,
+              event_date_raw: event.acf?.event_date || '',
+              event_date: eventDate,
+              event_location: event.acf?.event_location || '',
+              flyer_image: event._embedded?.['wp:featuredmedia']?.[0]?.source_url || null,
+            };
+          })
+          .filter((event) => {
+            if (!event.event_date) return false;
+            const eventDateNormalized = new Date(event.event_date);
+            eventDateNormalized.setHours(0, 0, 0, 0);
+            return eventDateNormalized >= today;
+          })
+          .sort((a, b) => {
+            const timeA = a.event_date?.getTime() || 0;
+            const timeB = b.event_date?.getTime() || 0;
+            return timeA - timeB;
+          })
+          .slice(0, 2);
+        
+        setPreviewEvents(upcomingEvents);
+        hasFetchedEvents.current = true;
+        
+        // Save to cache
+        await AsyncStorage.setItem(CACHE_KEY_EVENTS, JSON.stringify(upcomingEvents));
+        
+        console.log('[Home] Fetched and cached preview events:', upcomingEvents.length);
+      } catch (error) {
+        console.error('[Home] Error fetching preview events:', error);
+        // Keep existing events on error
+      }
+    }
+    
+    // NEWS
+    if (!hasFetchedNews.current || forceRefresh) {
+      try {
+        // Try to load from cache first
+        if (!forceRefresh) {
+          const cached = await AsyncStorage.getItem(CACHE_KEY_NEWS);
+          if (cached) {
+            const cachedNews = JSON.parse(cached);
+            setPreviewNews(cachedNews);
+            console.log('[Home] Loaded news from cache');
+          }
+        }
+
+        // Fetch News (2 latest) with timeout
+        const newsResponse = await fetchWithTimeout(
+          'https://yohitradio.com/wp-json/wp/v2/posts?_embed&per_page=2',
+          {},
+          { timeout: 10000, retries: 1, retryDelay: 1000 }
+        );
+        
+        const newsData: WordPressPost[] = await newsResponse.json();
+        const latestNews: PreviewArticle[] = newsData.map((post) => {
+          const decodedTitle = decodeHtmlEntities(post.title?.rendered ?? '');
           
           return {
-            id: String(event.id),
+            id: String(post.id),
             title: decodedTitle,
-            event_date_raw: event.acf?.event_date || '',
-            event_date: eventDate,
-            event_location: event.acf?.event_location || '',
-            flyer_image: event._embedded?.['wp:featuredmedia']?.[0]?.source_url || null,
+            published_date: post.date ?? '',
+            featured_image_url: post._embedded?.['wp:featuredmedia']?.[0]?.source_url ?? null,
           };
-        })
-        .filter((event) => {
-          if (!event.event_date) return false;
-          const eventDateNormalized = new Date(event.event_date);
-          eventDateNormalized.setHours(0, 0, 0, 0);
-          return eventDateNormalized >= today;
-        })
-        .sort((a, b) => {
-          const timeA = a.event_date?.getTime() || 0;
-          const timeB = b.event_date?.getTime() || 0;
-          return timeA - timeB;
-        })
-        .slice(0, 2);
-      
-      setPreviewEvents(upcomingEvents);
-      console.log('[Home] Fetched preview events:', upcomingEvents.length);
-    } catch (error) {
-      console.error('[Home] Error fetching preview events:', error);
-      // Keep existing events on error
+        });
+        
+        setPreviewNews(latestNews);
+        hasFetchedNews.current = true;
+        
+        // Save to cache
+        await AsyncStorage.setItem(CACHE_KEY_NEWS, JSON.stringify(latestNews));
+        
+        console.log('[Home] Fetched and cached preview news:', latestNews.length);
+      } catch (error) {
+        console.error('[Home] Error fetching preview news:', error);
+        // Keep existing news on error
+      }
     }
     
-    try {
-      // Fetch News (2 latest) with timeout
-      const newsResponse = await fetchWithTimeout(
-        'https://yohitradio.com/wp-json/wp/v2/posts?_embed&per_page=2',
-        {},
-        { timeout: 10000, retries: 1, retryDelay: 1000 }
-      );
-      
-      const newsData: WordPressPost[] = await newsResponse.json();
-      const latestNews: PreviewArticle[] = newsData.map((post) => {
-        const decodedTitle = decodeHtmlEntities(post.title?.rendered ?? '');
-        
-        return {
-          id: String(post.id),
-          title: decodedTitle,
-          published_date: post.date ?? '',
-          featured_image_url: post._embedded?.['wp:featuredmedia']?.[0]?.source_url ?? null,
-        };
-      });
-      
-      setPreviewNews(latestNews);
-      console.log('[Home] Fetched preview news:', latestNews.length);
-    } catch (error) {
-      console.error('[Home] Error fetching preview news:', error);
-      // Keep existing news on error
-    }
-    
-    try {
-      // Fetch Releases (2 latest) with timeout
-      const releasesResponse = await fetchWithTimeout(
-        'https://yohitradio.com/wp-json/wp/v2/song?per_page=2&orderby=date&order=desc&_embed',
-        {},
-        { timeout: 10000, retries: 1, retryDelay: 1000 }
-      );
-      
-      const releasesData: WordPressSong[] = await releasesResponse.json();
-      const latestReleases: PreviewRelease[] = releasesData.map((song) => {
-        const decodedTitle = decodeHtmlEntities(song.title.rendered);
-        
-        // Format release date
-        let releaseDate = '';
-        if (song.acf?.release_date && /^\d{8}$/.test(song.acf.release_date)) {
-          const year = song.acf.release_date.substring(0, 4);
-          const month = song.acf.release_date.substring(4, 6);
-          const day = song.acf.release_date.substring(6, 8);
-          const date = new Date(`${year}-${month}-${day}`);
-          const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-          releaseDate = `${months[date.getMonth()]} ${day}, ${year}`;
-        } else if (song.date) {
-          const date = new Date(song.date);
-          const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-          releaseDate = `${months[date.getMonth()]} ${String(date.getDate()).padStart(2, '0')}, ${date.getFullYear()}`;
+    // RELEASES
+    if (!hasFetchedReleases.current || forceRefresh) {
+      try {
+        // Try to load from cache first
+        if (!forceRefresh) {
+          const cached = await AsyncStorage.getItem(CACHE_KEY_RELEASES);
+          if (cached) {
+            const cachedReleases = JSON.parse(cached);
+            setPreviewReleases(cachedReleases);
+            console.log('[Home] Loaded releases from cache');
+          }
         }
+
+        // Fetch Releases (2 latest) with timeout
+        const releasesResponse = await fetchWithTimeout(
+          'https://yohitradio.com/wp-json/wp/v2/song?per_page=2&orderby=date&order=desc&_embed',
+          {},
+          { timeout: 10000, retries: 1, retryDelay: 1000 }
+        );
         
-        return {
-          id: song.id,
-          title: decodedTitle,
-          artist: song.acf?.artist_name || 'Unknown Artist',
-          coverImage: song._embedded?.['wp:featuredmedia']?.[0]?.source_url || null,
-          releaseDate: releaseDate,
-        };
-      });
-      
-      setPreviewReleases(latestReleases);
-      console.log('[Home] Fetched preview releases:', latestReleases.length);
-    } catch (error) {
-      console.error('[Home] Error fetching preview releases:', error);
-      // Keep existing releases on error
+        const releasesData: WordPressSong[] = await releasesResponse.json();
+        const latestReleases: PreviewRelease[] = releasesData.map((song) => {
+          const decodedTitle = decodeHtmlEntities(song.title.rendered);
+          
+          // Format release date
+          let releaseDate = '';
+          if (song.acf?.release_date && /^\d{8}$/.test(song.acf.release_date)) {
+            const year = song.acf.release_date.substring(0, 4);
+            const month = song.acf.release_date.substring(4, 6);
+            const day = song.acf.release_date.substring(6, 8);
+            const date = new Date(`${year}-${month}-${day}`);
+            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            releaseDate = `${months[date.getMonth()]} ${day}, ${year}`;
+          } else if (song.date) {
+            const date = new Date(song.date);
+            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            releaseDate = `${months[date.getMonth()]} ${String(date.getDate()).padStart(2, '0')}, ${date.getFullYear()}`;
+          }
+          
+          return {
+            id: song.id,
+            title: decodedTitle,
+            artist: song.acf?.artist_name || 'Unknown Artist',
+            coverImage: song._embedded?.['wp:featuredmedia']?.[0]?.source_url || null,
+            releaseDate: releaseDate,
+          };
+        });
+        
+        setPreviewReleases(latestReleases);
+        hasFetchedReleases.current = true;
+        
+        // Save to cache
+        await AsyncStorage.setItem(CACHE_KEY_RELEASES, JSON.stringify(latestReleases));
+        
+        console.log('[Home] Fetched and cached preview releases:', latestReleases.length);
+      } catch (error) {
+        console.error('[Home] Error fetching preview releases:', error);
+        // Keep existing releases on error
+      }
     }
     
     setLoadingPreviews(false);
   }, []);
 
+  // Pull-to-refresh handler
+  const onRefresh = useCallback(async () => {
+    console.log('[Home] User pulled to refresh - refreshing all data');
+    setRefreshing(true);
+    
+    // Force refresh all data
+    await Promise.all([
+      fetchMetadata(),
+      fetchSchedule(true),
+      fetchPreviewData(true),
+    ]);
+    
+    setRefreshing(false);
+    console.log('[Home] Refresh complete');
+  }, [fetchMetadata, fetchSchedule, fetchPreviewData]);
+
   // Load cached metadata immediately on mount, then start polling
+  // FIXED: This effect only runs once on mount (empty dependency array)
   useEffect(() => {
-    console.log('[Home] Component mounted - loading cached metadata');
+    console.log('[Home] Component mounted - loading cached metadata and starting polling');
     
     // Load cached metadata first for instant display
     loadMetadataCache().then((cached) => {
@@ -569,23 +666,34 @@ export default function HomeScreen() {
           coverImage: cached.coverImage,
         });
       }
-      
-      // Then start polling for fresh data
-      console.log('[Home] Starting continuous metadata polling');
-      console.log('[Home] Metadata will refresh every 12 seconds regardless of playback state');
-      startMetadataPolling();
     });
 
+    // Start metadata polling (runs independently)
+    console.log('[Home] Starting continuous metadata polling');
+    console.log('[Home] METADATA RULE: Metadata will refresh every 12 seconds even when playback is stopped');
+    
+    // Initial fetch
+    fetchMetadata();
+    
+    // Set up interval
+    metadataInterval.current = setInterval(() => {
+      fetchMetadata();
+    }, METADATA_POLL_INTERVAL);
+
+    // Cleanup on unmount
     return () => {
       console.log('[Home] Component unmounting - stopping metadata polling');
-      stopMetadataPolling();
+      if (metadataInterval.current) {
+        clearInterval(metadataInterval.current);
+        metadataInterval.current = null;
+      }
     };
-  }, [startMetadataPolling, stopMetadataPolling]);
+  }, []); // Empty dependency array - only runs once on mount
 
-  // Fetch schedule on mount
+  // FIXED: Fetch schedule on mount (with caching) - empty dependency array
   useEffect(() => {
     fetchSchedule();
-  }, [fetchSchedule]);
+  }, []); // FIXED: Removed fetchSchedule from dependency array
 
   // Update shows when schedule changes
   useEffect(() => {
@@ -601,33 +709,39 @@ export default function HomeScreen() {
     }
   }, [schedule, updateShows]);
 
-  // Fetch preview data on mount
+  // FIXED: Fetch preview data on mount (with caching) - empty dependency array
   useEffect(() => {
     fetchPreviewData();
-  }, [fetchPreviewData]);
+  }, []); // FIXED: Removed fetchPreviewData from dependency array
 
   const togglePlayback = async () => {
     try {
       if (isPlaying) {
-        console.log('[Home] User tapped Stop button - stopping audio but keeping metadata visible');
+        console.log('[Home] User tapped Stop button - stopping audio');
+        console.log('[Home] METADATA RULE: Metadata will continue refreshing even though playback stopped');
         await audioManager.stopCurrentAudio();
         setIsPlaying(false);
-        console.log('[Home] Audio stopped - metadata remains visible and continues refreshing');
-        console.log('[Home] Media notification removed (Android)');
-        console.log('[Home] Lock screen controls cleared');
+        console.log('[Home] Audio stopped');
+        console.log('[Home] Android: Foreground Service stopped, notification removed');
+        console.log('[Home] iOS: Lock screen controls cleared');
+        console.log('[Home] Metadata polling continues (METADATA RULE)');
       } else {
         console.log('[Home] User tapped Listen Live button');
         setLoading(true);
         
         const title = metadata?.displayTitle || 'Yo Hit Radio – Live Stream';
         const artist = metadata?.displayArtist || 'Live Stream';
+        const artwork = metadata?.coverImage || undefined;
         
-        console.log('[Home] Starting live stream with background playback enabled');
-        await audioManager.playAudio(STREAM_URL, true, title, artist);
+        console.log('[Home] Starting live stream with Android Foreground Service');
+        await audioManager.playAudio(STREAM_URL, true, title, artist, artwork);
         setIsPlaying(true);
         setLoading(false);
         
         console.log('[Home] Live stream started successfully');
+        console.log('[Home] Android: Foreground Service running (foregroundServiceType="mediaPlayback")');
+        console.log('[Home] Android: Persistent notification visible with Play/Pause controls');
+        console.log('[Home] iOS: Background audio active');
         console.log('[Home] Background playback active - audio will continue when:');
         console.log('[Home]   ✓ App goes to background');
         console.log('[Home]   ✓ User opens another app (WhatsApp, Facebook, etc.)');
@@ -636,7 +750,7 @@ export default function HomeScreen() {
         console.log('[Home] Lock screen controls available (Play/Pause)');
         
         if (Platform.OS === 'android') {
-          console.log('[Home] Android: Media notification visible with Play/Pause controls');
+          console.log('[Home] Android: Media notification visible in notification shade');
           console.log('[Home] Android: Audio focus acquired (DoNotMix mode)');
           console.log('[Home] Android: MediaSession active for Android Auto support');
         } else if (Platform.OS === 'ios') {
@@ -719,6 +833,14 @@ export default function HomeScreen() {
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor="#FFD700"
+              colors={['#FFD700']}
+            />
+          }
         >
           <View style={styles.logoContainer}>
             <Image

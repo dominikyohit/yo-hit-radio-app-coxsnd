@@ -29,7 +29,13 @@
       },
       "edgeToEdgeEnabled": true,
       "package": "com.yohitradio.app",
-      "googleServicesFile": "./google-services.json"
+      "googleServicesFile": "./google-services.json",
+      "permissions": [
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.WAKE_LOCK"
+      ]
     },
     "web": {
       "favicon": "./assets/images/final_quest_240x240.png",
@@ -39,6 +45,14 @@
       "expo-font",
       "expo-router",
       "expo-web-browser",
+      [
+        "react-native-track-player",
+        {
+          "android": {
+            "foregroundServiceType": "mediaPlayback"
+          }
+        }
+      ],
       [
         "onesignal-expo-plugin",
         {
