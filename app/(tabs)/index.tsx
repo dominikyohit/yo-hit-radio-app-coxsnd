@@ -690,10 +690,10 @@ export default function HomeScreen() {
     };
   }, []); // Empty dependency array - only runs once on mount
 
-  // FIXED: Fetch schedule on mount (with caching) - empty dependency array
+  // Fetch schedule on mount (with caching)
   useEffect(() => {
     fetchSchedule();
-  }, []); // FIXED: Removed fetchSchedule from dependency array
+  }, [fetchSchedule]);
 
   // Update shows when schedule changes
   useEffect(() => {
@@ -709,10 +709,10 @@ export default function HomeScreen() {
     }
   }, [schedule, updateShows]);
 
-  // FIXED: Fetch preview data on mount (with caching) - empty dependency array
+  // Fetch preview data on mount (with caching)
   useEffect(() => {
     fetchPreviewData();
-  }, []); // FIXED: Removed fetchPreviewData from dependency array
+  }, [fetchPreviewData]);
 
   const togglePlayback = async () => {
     try {
