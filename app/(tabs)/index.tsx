@@ -1,5 +1,22 @@
 
+import { colors } from '@/styles/commonStyles';
+import { LinearGradient } from 'expo-linear-gradient';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withTiming,
+  Easing,
+} from 'react-native-reanimated';
+import { parseEventDate, formatDateBadge } from '@/utils/dateHelpers';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import AudioManager from '@/utils/audioManager';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { IconSymbol } from '@/components/IconSymbol';
+import { decodeHtmlEntities } from '@/utils/htmlDecoder';
+import { OptimizedImage } from '@/components/OptimizedImage';
+import { fetchWithTimeout, isNetworkError } from '@/utils/networkHelpers';
+import { saveMetadataCache, loadMetadataCache } from '@/utils/metadataCache';
 import {
   View,
   Text,
@@ -12,26 +29,7 @@ import {
   ActivityIndicator,
   ImageSourcePropType,
 } from 'react-native';
-import { colors } from '@/styles/commonStyles';
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { IconSymbol } from '@/components/IconSymbol';
 import { useRouter } from 'expo-router';
-import { LinearGradient } from 'expo-linear-gradient';
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withRepeat,
-  withTiming,
-  Easing,
-} from 'react-native-reanimated';
-import AudioManager from '@/utils/audioManager';
-import { parseEventDate, formatDateBadge } from '@/utils/dateHelpers';
-import { decodeHtmlEntities } from '@/utils/htmlDecoder';
-
-const STREAM_URL = 'https://a13.asurahosting.com/listen/yo_hit_radio/radio.mp3';
-const METADATA_POLL_INTERVAL = 12000; // 12 seconds - polls AzuraCast API every 12 seconds
-const AZURACAST_API_URL = 'https://a13.asurahosting.com/api/nowplaying/yo_hit_radio';
-const WORDPRESS_SCHEDULE_URL = 'https://yohitradio.com/wp-json/wp/v2/calendrier?per_page=100&_embed';
 
 interface Show {
   id: number;
@@ -41,9 +39,9 @@ interface Show {
   imageUrl: string | null;
 }
 
-interface Schedule {
+type Schedule = {
   [day: string]: Show[];
-}
+};
 
 // AzuraCast metadata interface
 interface AzuraCastMetadata {
@@ -136,6 +134,11 @@ interface WordPressScheduleItem {
     }>;
   };
 }
+
+const STREAM_URL = 'https://a13.asurahosting.com/listen/yo_hit_radio/radio.mp3';
+const METADATA_POLL_INTERVAL = 12000; // 12 seconds - polls AzuraCast API every 12 seconds
+const AZURACAST_API_URL = 'https://a13.asurahosting.com/api/nowplaying/yo_hit_radio';
+const WORDPRESS_SCHEDULE_URL = 'https://yohitradio.com/wp-json/wp/v2/calendrier?per_page=100&_embed';
 
 // Function to get current and next shows from WordPress schedule
 const getCurrentAndNextShows = (schedule: Schedule): { currentShow: Show | null; nextShow: Show | null } => {
@@ -236,10 +239,13 @@ export default function HomeScreen() {
   const fetchMetadata = useCallback(async () => {
     console.log('[Home] Fetching metadata from AzuraCast API...');
     try {
-      const response = await fetch(AZURACAST_API_URL);
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
+      // Use fetchWithTimeout for network resilience
+      const response = await fetchWithTimeout(
+        AZURACAST_API_URL,
+        {},
+        { timeout: 8000, retries: 2, retryDelay: 1000 }
+      );
+      
       const data = await response.json();
       console.log('[Home] Fetched metadata from AzuraCast API:', data);
 
@@ -256,6 +262,9 @@ export default function HomeScreen() {
         };
         setMetadata(fallbackMetadata);
         
+        // Save to cache
+        await saveMetadataCache(fallbackMetadata);
+        
         // Update lock screen metadata even when paused
         await audioManager.updateMetadata(
           fallbackMetadata.displayTitle,
@@ -269,6 +278,9 @@ export default function HomeScreen() {
         };
         setMetadata(newMetadata);
         
+        // Save to cache for instant display on next load
+        await saveMetadataCache(newMetadata);
+        
         // Update lock screen metadata even when paused
         // This ensures Now Playing info stays current
         await audioManager.updateMetadata(
@@ -277,36 +289,49 @@ export default function HomeScreen() {
           newMetadata.coverImage || undefined
         );
         
-        console.log('[Home] Updated lock screen metadata:', {
+        console.log('[Home] Updated lock screen metadata and cache:', {
           title: newMetadata.displayTitle,
           artist: newMetadata.displayArtist,
         });
       }
     } catch (error) {
       console.error('[Home] Error fetching metadata from AzuraCast API:', error);
-      const fallbackMetadata = {
-        displayTitle: 'Live Stream',
-        displayArtist: 'Yo Hit Radio',
-        coverImage: null,
-      };
-      setMetadata(fallbackMetadata);
       
-      // Update lock screen metadata even on error
-      await audioManager.updateMetadata(
-        fallbackMetadata.displayTitle,
-        fallbackMetadata.displayArtist
-      );
+      // On network error, keep existing metadata (don't clear it)
+      // This prevents blank screens on slow networks
+      if (isNetworkError(error)) {
+        console.log('[Home] Network error - keeping existing metadata visible');
+      } else {
+        // Only set fallback if we don't have any metadata yet
+        if (!metadata) {
+          const fallbackMetadata = {
+            displayTitle: 'Live Stream',
+            displayArtist: 'Yo Hit Radio',
+            coverImage: null,
+          };
+          setMetadata(fallbackMetadata);
+          
+          // Update lock screen metadata even on error
+          await audioManager.updateMetadata(
+            fallbackMetadata.displayTitle,
+            fallbackMetadata.displayArtist
+          );
+        }
+      }
     }
-  }, [audioManager]);
+  }, [audioManager, metadata]);
 
   // Fetch schedule from WordPress
   const fetchSchedule = useCallback(async () => {
     console.log('[Home] Fetching schedule from WordPress...');
     try {
-      const response = await fetch(WORDPRESS_SCHEDULE_URL);
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
+      // Use fetchWithTimeout for network resilience
+      const response = await fetchWithTimeout(
+        WORDPRESS_SCHEDULE_URL,
+        {},
+        { timeout: 10000, retries: 2, retryDelay: 1000 }
+      );
+      
       const data: WordPressScheduleItem[] = await response.json();
       console.log(`[Home] Fetched ${data.length} schedule items from WordPress`);
 
@@ -374,6 +399,10 @@ export default function HomeScreen() {
       console.log('[Home] Schedule loaded successfully');
     } catch (error) {
       console.error('[Home] Error fetching schedule:', error);
+      // Don't clear existing schedule on error - keep it visible
+      if (isNetworkError(error)) {
+        console.log('[Home] Network error - keeping existing schedule visible');
+      }
     }
   }, []);
 
@@ -408,117 +437,144 @@ export default function HomeScreen() {
     setLoadingPreviews(true);
     
     try {
-      // Fetch Events (2 upcoming)
-      const eventsResponse = await fetch('https://yohitradio.com/wp-json/wp/v2/bal?_embed&per_page=100');
-      if (eventsResponse.ok) {
-        const eventsData: WordPressEvent[] = await eventsResponse.json();
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        
-        const upcomingEvents: PreviewEvent[] = eventsData
-          .map((event) => {
-            const eventDate = parseEventDate(event.acf?.event_date);
-            const decodedTitle = decodeHtmlEntities(event.title.rendered);
-            
-            return {
-              id: String(event.id),
-              title: decodedTitle,
-              event_date_raw: event.acf?.event_date || '',
-              event_date: eventDate,
-              event_location: event.acf?.event_location || '',
-              flyer_image: event._embedded?.['wp:featuredmedia']?.[0]?.source_url || null,
-            };
-          })
-          .filter((event) => {
-            if (!event.event_date) return false;
-            const eventDateNormalized = new Date(event.event_date);
-            eventDateNormalized.setHours(0, 0, 0, 0);
-            return eventDateNormalized >= today;
-          })
-          .sort((a, b) => {
-            const timeA = a.event_date?.getTime() || 0;
-            const timeB = b.event_date?.getTime() || 0;
-            return timeA - timeB;
-          })
-          .slice(0, 2);
-        
-        setPreviewEvents(upcomingEvents);
-        console.log('[Home] Fetched preview events:', upcomingEvents.length);
-      }
+      // Fetch Events (2 upcoming) with timeout
+      const eventsResponse = await fetchWithTimeout(
+        'https://yohitradio.com/wp-json/wp/v2/bal?_embed&per_page=100',
+        {},
+        { timeout: 10000, retries: 1, retryDelay: 1000 }
+      );
+      
+      const eventsData: WordPressEvent[] = await eventsResponse.json();
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      const upcomingEvents: PreviewEvent[] = eventsData
+        .map((event) => {
+          const eventDate = parseEventDate(event.acf?.event_date);
+          const decodedTitle = decodeHtmlEntities(event.title.rendered);
+          
+          return {
+            id: String(event.id),
+            title: decodedTitle,
+            event_date_raw: event.acf?.event_date || '',
+            event_date: eventDate,
+            event_location: event.acf?.event_location || '',
+            flyer_image: event._embedded?.['wp:featuredmedia']?.[0]?.source_url || null,
+          };
+        })
+        .filter((event) => {
+          if (!event.event_date) return false;
+          const eventDateNormalized = new Date(event.event_date);
+          eventDateNormalized.setHours(0, 0, 0, 0);
+          return eventDateNormalized >= today;
+        })
+        .sort((a, b) => {
+          const timeA = a.event_date?.getTime() || 0;
+          const timeB = b.event_date?.getTime() || 0;
+          return timeA - timeB;
+        })
+        .slice(0, 2);
+      
+      setPreviewEvents(upcomingEvents);
+      console.log('[Home] Fetched preview events:', upcomingEvents.length);
     } catch (error) {
       console.error('[Home] Error fetching preview events:', error);
+      // Keep existing events on error
     }
     
     try {
-      // Fetch News (2 latest)
-      const newsResponse = await fetch('https://yohitradio.com/wp-json/wp/v2/posts?_embed&per_page=2');
-      if (newsResponse.ok) {
-        const newsData: WordPressPost[] = await newsResponse.json();
-        const latestNews: PreviewArticle[] = newsData.map((post) => {
-          const decodedTitle = decodeHtmlEntities(post.title?.rendered ?? '');
-          
-          return {
-            id: String(post.id),
-            title: decodedTitle,
-            published_date: post.date ?? '',
-            featured_image_url: post._embedded?.['wp:featuredmedia']?.[0]?.source_url ?? null,
-          };
-        });
+      // Fetch News (2 latest) with timeout
+      const newsResponse = await fetchWithTimeout(
+        'https://yohitradio.com/wp-json/wp/v2/posts?_embed&per_page=2',
+        {},
+        { timeout: 10000, retries: 1, retryDelay: 1000 }
+      );
+      
+      const newsData: WordPressPost[] = await newsResponse.json();
+      const latestNews: PreviewArticle[] = newsData.map((post) => {
+        const decodedTitle = decodeHtmlEntities(post.title?.rendered ?? '');
         
-        setPreviewNews(latestNews);
-        console.log('[Home] Fetched preview news:', latestNews.length);
-      }
+        return {
+          id: String(post.id),
+          title: decodedTitle,
+          published_date: post.date ?? '',
+          featured_image_url: post._embedded?.['wp:featuredmedia']?.[0]?.source_url ?? null,
+        };
+      });
+      
+      setPreviewNews(latestNews);
+      console.log('[Home] Fetched preview news:', latestNews.length);
     } catch (error) {
       console.error('[Home] Error fetching preview news:', error);
+      // Keep existing news on error
     }
     
     try {
-      // Fetch Releases (2 latest)
-      const releasesResponse = await fetch('https://yohitradio.com/wp-json/wp/v2/song?per_page=2&orderby=date&order=desc&_embed');
-      if (releasesResponse.ok) {
-        const releasesData: WordPressSong[] = await releasesResponse.json();
-        const latestReleases: PreviewRelease[] = releasesData.map((song) => {
-          const decodedTitle = decodeHtmlEntities(song.title.rendered);
-          
-          // Format release date
-          let releaseDate = '';
-          if (song.acf?.release_date && /^\d{8}$/.test(song.acf.release_date)) {
-            const year = song.acf.release_date.substring(0, 4);
-            const month = song.acf.release_date.substring(4, 6);
-            const day = song.acf.release_date.substring(6, 8);
-            const date = new Date(`${year}-${month}-${day}`);
-            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-            releaseDate = `${months[date.getMonth()]} ${day}, ${year}`;
-          } else if (song.date) {
-            const date = new Date(song.date);
-            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-            releaseDate = `${months[date.getMonth()]} ${String(date.getDate()).padStart(2, '0')}, ${date.getFullYear()}`;
-          }
-          
-          return {
-            id: song.id,
-            title: decodedTitle,
-            artist: song.acf?.artist_name || 'Unknown Artist',
-            coverImage: song._embedded?.['wp:featuredmedia']?.[0]?.source_url || null,
-            releaseDate: releaseDate,
-          };
-        });
+      // Fetch Releases (2 latest) with timeout
+      const releasesResponse = await fetchWithTimeout(
+        'https://yohitradio.com/wp-json/wp/v2/song?per_page=2&orderby=date&order=desc&_embed',
+        {},
+        { timeout: 10000, retries: 1, retryDelay: 1000 }
+      );
+      
+      const releasesData: WordPressSong[] = await releasesResponse.json();
+      const latestReleases: PreviewRelease[] = releasesData.map((song) => {
+        const decodedTitle = decodeHtmlEntities(song.title.rendered);
         
-        setPreviewReleases(latestReleases);
-        console.log('[Home] Fetched preview releases:', latestReleases.length);
-      }
+        // Format release date
+        let releaseDate = '';
+        if (song.acf?.release_date && /^\d{8}$/.test(song.acf.release_date)) {
+          const year = song.acf.release_date.substring(0, 4);
+          const month = song.acf.release_date.substring(4, 6);
+          const day = song.acf.release_date.substring(6, 8);
+          const date = new Date(`${year}-${month}-${day}`);
+          const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+          releaseDate = `${months[date.getMonth()]} ${day}, ${year}`;
+        } else if (song.date) {
+          const date = new Date(song.date);
+          const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+          releaseDate = `${months[date.getMonth()]} ${String(date.getDate()).padStart(2, '0')}, ${date.getFullYear()}`;
+        }
+        
+        return {
+          id: song.id,
+          title: decodedTitle,
+          artist: song.acf?.artist_name || 'Unknown Artist',
+          coverImage: song._embedded?.['wp:featuredmedia']?.[0]?.source_url || null,
+          releaseDate: releaseDate,
+        };
+      });
+      
+      setPreviewReleases(latestReleases);
+      console.log('[Home] Fetched preview releases:', latestReleases.length);
     } catch (error) {
       console.error('[Home] Error fetching preview releases:', error);
+      // Keep existing releases on error
     }
     
     setLoadingPreviews(false);
   }, []);
 
-  // Start metadata polling on mount (always refresh, whether playing or not)
+  // Load cached metadata immediately on mount, then start polling
   useEffect(() => {
-    console.log('[Home] Component mounted - starting continuous metadata polling');
-    console.log('[Home] Metadata will refresh every 12 seconds regardless of playback state');
-    startMetadataPolling();
+    console.log('[Home] Component mounted - loading cached metadata');
+    
+    // Load cached metadata first for instant display
+    loadMetadataCache().then((cached) => {
+      if (cached) {
+        console.log('[Home] Displaying cached metadata immediately');
+        setMetadata({
+          displayTitle: cached.displayTitle,
+          displayArtist: cached.displayArtist,
+          coverImage: cached.coverImage,
+        });
+      }
+      
+      // Then start polling for fresh data
+      console.log('[Home] Starting continuous metadata polling');
+      console.log('[Home] Metadata will refresh every 12 seconds regardless of playback state');
+      startMetadataPolling();
+    });
 
     return () => {
       console.log('[Home] Component unmounting - stopping metadata polling');
@@ -653,6 +709,9 @@ export default function HomeScreen() {
   const displayTitle = metadata?.displayTitle || 'Live Stream';
   const displayArtist = metadata?.displayArtist || 'Yo Hit Radio';
   const displayArtwork = metadata?.coverImage;
+  
+  // Fallback logo source
+  const fallbackLogo = require('@/assets/images/final_quest_240x240.png');
 
   return (
     <LinearGradient colors={['#1a0033', '#330066', '#1a0033']} style={styles.gradient}>
@@ -675,18 +734,17 @@ export default function HomeScreen() {
 
           <View style={styles.nowPlayingCard}>
             <Text style={styles.nowPlayingLabel}>NOW PLAYING</Text>
-            {displayArtwork ? (
-              <Animated.View style={[styles.coverImageContainer, animatedStyle]}>
-                <Image source={{ uri: displayArtwork }} style={styles.coverImage} />
-              </Animated.View>
-            ) : (
-              <Animated.View style={[styles.coverImageContainer, animatedStyle]}>
-                <Image
-                  source={require('@/assets/images/final_quest_240x240.png')}
-                  style={styles.coverImage}
-                />
-              </Animated.View>
-            )}
+            <Animated.View style={[styles.coverImageContainer, animatedStyle]}>
+              <OptimizedImage
+                source={displayArtwork}
+                fallbackSource={fallbackLogo}
+                style={styles.coverImage}
+                resizeMode="cover"
+                placeholderIcon="music.note"
+                placeholderIconMaterial="music-note"
+                placeholderColor="rgba(255, 215, 0, 0.3)"
+              />
+            </Animated.View>
             <Text style={styles.songTitle} numberOfLines={2}>
               {displayTitle}
             </Text>
@@ -723,22 +781,14 @@ export default function HomeScreen() {
               </View>
               {currentShow ? (
                 <>
-                  {currentShow.imageUrl ? (
-                    <Image
-                      source={resolveImageSource(currentShow.imageUrl)}
-                      style={styles.showCardImage}
-                      resizeMode="cover"
-                    />
-                  ) : (
-                    <View style={styles.showCardImagePlaceholder}>
-                      <IconSymbol
-                        ios_icon_name="music.note"
-                        android_material_icon_name="music-note"
-                        size={32}
-                        color="rgba(255, 215, 0, 0.3)"
-                      />
-                    </View>
-                  )}
+                  <OptimizedImage
+                    source={currentShow.imageUrl}
+                    style={styles.showCardImage}
+                    resizeMode="cover"
+                    placeholderIcon="music.note"
+                    placeholderIconMaterial="music-note"
+                    placeholderColor="rgba(255, 215, 0, 0.3)"
+                  />
                   <View style={styles.showCardTextContent}>
                     <Text style={styles.showCardTitle} numberOfLines={2}>
                       {currentShow.name}
@@ -774,22 +824,14 @@ export default function HomeScreen() {
               </View>
               {nextShow ? (
                 <>
-                  {nextShow.imageUrl ? (
-                    <Image
-                      source={resolveImageSource(nextShow.imageUrl)}
-                      style={styles.showCardImage}
-                      resizeMode="cover"
-                    />
-                  ) : (
-                    <View style={styles.showCardImagePlaceholder}>
-                      <IconSymbol
-                        ios_icon_name="music.note"
-                        android_material_icon_name="music-note"
-                        size={32}
-                        color="rgba(255, 215, 0, 0.3)"
-                      />
-                    </View>
-                  )}
+                  <OptimizedImage
+                    source={nextShow.imageUrl}
+                    style={styles.showCardImage}
+                    resizeMode="cover"
+                    placeholderIcon="music.note"
+                    placeholderIconMaterial="music-note"
+                    placeholderColor="rgba(255, 215, 0, 0.3)"
+                  />
                   <View style={styles.showCardTextContent}>
                     <Text style={styles.showCardTitle} numberOfLines={2}>
                       {nextShow.name}
@@ -846,22 +888,14 @@ export default function HomeScreen() {
                       onPress={() => handleEventPress(event)}
                       activeOpacity={0.8}
                     >
-                      {event.flyer_image ? (
-                        <Image
-                          source={resolveImageSource(event.flyer_image)}
-                          style={styles.previewImage}
-                          resizeMode="cover"
-                        />
-                      ) : (
-                        <View style={styles.previewImagePlaceholder}>
-                          <IconSymbol
-                            ios_icon_name="calendar"
-                            android_material_icon_name="event"
-                            size={40}
-                            color="rgba(255, 215, 0, 0.3)"
-                          />
-                        </View>
-                      )}
+                      <OptimizedImage
+                        source={event.flyer_image}
+                        style={styles.previewImage}
+                        resizeMode="cover"
+                        placeholderIcon="calendar"
+                        placeholderIconMaterial="event"
+                        placeholderColor="rgba(255, 215, 0, 0.3)"
+                      />
                       <View style={styles.previewCardContent}>
                         <Text style={styles.previewCardTitle} numberOfLines={2}>
                           {event.title}
@@ -921,22 +955,14 @@ export default function HomeScreen() {
                       onPress={() => handleNewsPress(article)}
                       activeOpacity={0.8}
                     >
-                      {article.featured_image_url ? (
-                        <Image
-                          source={resolveImageSource(article.featured_image_url)}
-                          style={styles.previewImage}
-                          resizeMode="cover"
-                        />
-                      ) : (
-                        <View style={styles.previewImagePlaceholder}>
-                          <IconSymbol
-                            ios_icon_name="newspaper"
-                            android_material_icon_name="article"
-                            size={40}
-                            color="rgba(255, 215, 0, 0.3)"
-                          />
-                        </View>
-                      )}
+                      <OptimizedImage
+                        source={article.featured_image_url}
+                        style={styles.previewImage}
+                        resizeMode="cover"
+                        placeholderIcon="newspaper"
+                        placeholderIconMaterial="article"
+                        placeholderColor="rgba(255, 215, 0, 0.3)"
+                      />
                       <View style={styles.previewCardContent}>
                         <Text style={styles.previewCardTitle} numberOfLines={2}>
                           {article.title}
@@ -980,22 +1006,14 @@ export default function HomeScreen() {
                     onPress={() => handleReleasePress(release)}
                     activeOpacity={0.8}
                   >
-                    {release.coverImage ? (
-                      <Image
-                        source={resolveImageSource(release.coverImage)}
-                        style={styles.previewImage}
-                        resizeMode="cover"
-                      />
-                    ) : (
-                      <View style={styles.previewImagePlaceholder}>
-                        <IconSymbol
-                          ios_icon_name="music.note"
-                          android_material_icon_name="music-note"
-                          size={40}
-                          color="rgba(255, 215, 0, 0.3)"
-                        />
-                      </View>
-                    )}
+                    <OptimizedImage
+                      source={release.coverImage}
+                      style={styles.previewImage}
+                      resizeMode="cover"
+                      placeholderIcon="music.note"
+                      placeholderIconMaterial="music-note"
+                      placeholderColor="rgba(255, 215, 0, 0.3)"
+                    />
                     <View style={styles.previewCardContent}>
                       <Text style={styles.previewCardTitle} numberOfLines={2}>
                         {release.title}
