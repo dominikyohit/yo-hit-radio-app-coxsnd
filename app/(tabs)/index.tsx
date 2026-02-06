@@ -17,6 +17,7 @@ import { decodeHtmlEntities } from '@/utils/htmlDecoder';
 import { OptimizedImage } from '@/components/OptimizedImage';
 import { fetchWithTimeout, isNetworkError } from '@/utils/networkHelpers';
 import { saveMetadataCache, loadMetadataCache } from '@/utils/metadataCache';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   View,
   Text,
@@ -28,6 +29,7 @@ import {
   Platform,
   ActivityIndicator,
   ImageSourcePropType,
+  Modal,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 
@@ -139,6 +141,7 @@ const STREAM_URL = 'https://a13.asurahosting.com/listen/yo_hit_radio/radio.mp3';
 const METADATA_POLL_INTERVAL = 12000; // 12 seconds - polls AzuraCast API every 12 seconds
 const AZURACAST_API_URL = 'https://a13.asurahosting.com/api/nowplaying/yo_hit_radio';
 const WORDPRESS_SCHEDULE_URL = 'https://yohitradio.com/wp-json/wp/v2/calendrier?per_page=100&_embed';
+const BACKGROUND_INFO_SHOWN_KEY = '@yo_hit_radio_background_info_shown';
 
 // Function to get current and next shows from WordPress schedule
 const getCurrentAndNextShows = (schedule: Schedule): { currentShow: Show | null; nextShow: Show | null } => {
@@ -213,6 +216,9 @@ export default function HomeScreen() {
   const [previewNews, setPreviewNews] = useState<PreviewArticle[]>([]);
   const [previewReleases, setPreviewReleases] = useState<PreviewRelease[]>([]);
   const [loadingPreviews, setLoadingPreviews] = useState(true);
+  
+  // Background info popup state
+  const [showBackgroundInfoPopup, setShowBackgroundInfoPopup] = useState(false);
   
   const metadataInterval = useRef<NodeJS.Timeout | null>(null);
   const showUpdateInterval = useRef<NodeJS.Timeout | null>(null);
@@ -301,22 +307,6 @@ export default function HomeScreen() {
       // This prevents blank screens on slow networks
       if (isNetworkError(error)) {
         console.log('[Home] Network error - keeping existing metadata visible');
-      } else {
-        // Only set fallback if we don't have any metadata yet
-        if (!metadata) {
-          const fallbackMetadata = {
-            displayTitle: 'Live Stream',
-            displayArtist: 'Yo Hit Radio',
-            coverImage: null,
-          };
-          setMetadata(fallbackMetadata);
-          
-          // Update lock screen metadata even on error
-          await audioManager.updateMetadata(
-            fallbackMetadata.displayTitle,
-            fallbackMetadata.displayArtist
-          );
-        }
       }
     }
   }, [audioManager]);
@@ -600,6 +590,33 @@ export default function HomeScreen() {
     fetchPreviewData();
   }, [fetchPreviewData]);
 
+  // Check if background info popup should be shown
+  const checkAndShowBackgroundInfoPopup = async () => {
+    try {
+      const hasShown = await AsyncStorage.getItem(BACKGROUND_INFO_SHOWN_KEY);
+      console.log('[Home] Background info popup shown before:', hasShown);
+      
+      if (!hasShown && Platform.OS === 'android') {
+        console.log('[Home] Showing background info popup for first time on Android');
+        setShowBackgroundInfoPopup(true);
+      }
+    } catch (error) {
+      console.error('[Home] Error checking background info popup status:', error);
+    }
+  };
+
+  const dismissBackgroundInfoPopup = async () => {
+    console.log('[Home] User dismissed background info popup');
+    setShowBackgroundInfoPopup(false);
+    
+    try {
+      await AsyncStorage.setItem(BACKGROUND_INFO_SHOWN_KEY, 'true');
+      console.log('[Home] Background info popup marked as shown');
+    } catch (error) {
+      console.error('[Home] Error saving background info popup status:', error);
+    }
+  };
+
   const togglePlayback = async () => {
     try {
       if (isPlaying) {
@@ -611,6 +628,10 @@ export default function HomeScreen() {
         console.log('[Home] Lock screen controls cleared');
       } else {
         console.log('[Home] User tapped Listen Live button');
+        
+        // Check if we should show the background info popup (first time only, Android only)
+        await checkAndShowBackgroundInfoPopup();
+        
         setLoading(true);
         
         const title = metadata?.displayTitle || 'Yo Hit Radio – Live Stream';
@@ -1028,6 +1049,31 @@ export default function HomeScreen() {
           </View>
         </ScrollView>
       </SafeAreaView>
+
+      {/* Background Info Popup Modal */}
+      <Modal
+        visible={showBackgroundInfoPopup}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={dismissBackgroundInfoPopup}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Radyo a an Background (Android)</Text>
+            <Text style={styles.modalMessage}>
+              Pou radyo a kontinye jwe an background menm lè ou soti sou app la, ale nan:{'\n\n'}
+              Settings → Apps → Yo Hit Radio → Battery → chwazi "Unrestricted" (Non Restreinte).
+            </Text>
+            <TouchableOpacity
+              style={styles.modalButton}
+              onPress={dismissBackgroundInfoPopup}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.modalButtonText}>OK</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </LinearGradient>
   );
 }
@@ -1323,5 +1369,48 @@ const styles = StyleSheet.create({
     color: '#888888',
     fontSize: 14,
     fontStyle: 'italic',
+  },
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: '#1a0033',
+    borderRadius: 20,
+    padding: 24,
+    width: '100%',
+    maxWidth: 400,
+    borderWidth: 2,
+    borderColor: '#FFD700',
+  },
+  modalTitle: {
+    color: '#FFD700',
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  modalMessage: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    lineHeight: 22,
+    marginBottom: 24,
+    textAlign: 'left',
+  },
+  modalButton: {
+    backgroundColor: '#FFD700',
+    paddingVertical: 14,
+    paddingHorizontal: 32,
+    borderRadius: 25,
+    alignItems: 'center',
+  },
+  modalButtonText: {
+    color: '#1a0033',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 });
