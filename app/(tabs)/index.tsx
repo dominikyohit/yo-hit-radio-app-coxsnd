@@ -319,7 +319,7 @@ export default function HomeScreen() {
         }
       }
     }
-  }, [audioManager, metadata]);
+  }, [audioManager]);
 
   // Fetch schedule from WordPress
   const fetchSchedule = useCallback(async () => {
@@ -412,24 +412,6 @@ export default function HomeScreen() {
     setCurrentShow(current);
     setNextShow(next);
   }, [schedule]);
-
-  const startMetadataPolling = useCallback(() => {
-    console.log('[Home] Starting metadata polling (continuous - refreshes even when paused)');
-    fetchMetadata();
-    if (metadataInterval.current) {
-      clearInterval(metadataInterval.current);
-    }
-    metadataInterval.current = setInterval(fetchMetadata, METADATA_POLL_INTERVAL);
-  }, [fetchMetadata]);
-
-  const stopMetadataPolling = useCallback(() => {
-    console.log('[Home] Stopping metadata polling');
-    if (metadataInterval.current) {
-      clearInterval(metadataInterval.current);
-      metadataInterval.current = null;
-    }
-    // DO NOT clear metadata - keep it visible
-  }, []);
 
   // Fetch preview data for all 3 sections
   const fetchPreviewData = useCallback(async () => {
@@ -556,8 +538,9 @@ export default function HomeScreen() {
   }, []);
 
   // Load cached metadata immediately on mount, then start polling
+  // FIXED: This effect only runs once on mount (empty dependency array)
   useEffect(() => {
-    console.log('[Home] Component mounted - loading cached metadata');
+    console.log('[Home] Component mounted - loading cached metadata and starting polling');
     
     // Load cached metadata first for instant display
     loadMetadataCache().then((cached) => {
@@ -569,18 +552,29 @@ export default function HomeScreen() {
           coverImage: cached.coverImage,
         });
       }
-      
-      // Then start polling for fresh data
-      console.log('[Home] Starting continuous metadata polling');
-      console.log('[Home] Metadata will refresh every 12 seconds regardless of playback state');
-      startMetadataPolling();
     });
 
+    // Start metadata polling (runs independently)
+    console.log('[Home] Starting continuous metadata polling');
+    console.log('[Home] Metadata will refresh every 12 seconds regardless of playback state');
+    
+    // Initial fetch
+    fetchMetadata();
+    
+    // Set up interval
+    metadataInterval.current = setInterval(() => {
+      fetchMetadata();
+    }, METADATA_POLL_INTERVAL);
+
+    // Cleanup on unmount
     return () => {
       console.log('[Home] Component unmounting - stopping metadata polling');
-      stopMetadataPolling();
+      if (metadataInterval.current) {
+        clearInterval(metadataInterval.current);
+        metadataInterval.current = null;
+      }
     };
-  }, [startMetadataPolling, stopMetadataPolling]);
+  }, []); // Empty dependency array - only runs once on mount
 
   // Fetch schedule on mount
   useEffect(() => {
