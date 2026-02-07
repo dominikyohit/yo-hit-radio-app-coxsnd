@@ -1,15 +1,16 @@
-
 {
   "expo": {
     "name": "Yo Hit Radio",
     "slug": "Yo Hit Radio",
     "version": "1.0.2",
     "orientation": "portrait",
+    "icon": "./assets/images/logo 192 (1).png",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
+      "image": "./assets/images/logo 192 (1).png",
       "resizeMode": "contain",
-      "backgroundColor": "#4B1E78"
+      "backgroundColor": "#000000"
     },
     "ios": {
       "supportsTablet": true,
@@ -25,7 +26,8 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#4B1E78"
+        "foregroundImage": "./assets/images/logo 192 (1).png",
+        "backgroundColor": "#000000"
       },
       "edgeToEdgeEnabled": true,
       "package": "com.yohitradio.app",
@@ -50,6 +52,7 @@
       ]
     },
     "web": {
+      "favicon": "./assets/images/final_quest_240x240.png",
       "bundler": "metro"
     },
     "plugins": [
