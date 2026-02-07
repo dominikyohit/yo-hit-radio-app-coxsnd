@@ -1,8 +1,9 @@
+
 {
   "expo": {
     "name": "Yo Hit Radio",
-    "slug": "Yo Hit Radio",
-    "version": "1.0.0",
+    "slug": "yo-hit-radio-app-coxsnd",
+    "version": "1.0.2",
     "orientation": "portrait",
     "icon": "./assets/images/logo 192 (1).png",
     "userInterfaceStyle": "automatic",
@@ -19,7 +20,9 @@
         "ITSAppUsesNonExemptEncryption": false,
         "UIBackgroundModes": [
           "audio"
-        ]
+        ],
+        "NSCameraUsageDescription": false,
+        "NSPhotoLibraryUsageDescription": false
       }
     },
     "android": {
@@ -29,7 +32,25 @@
       },
       "edgeToEdgeEnabled": true,
       "package": "com.yohitradio.app",
-      "googleServicesFile": "./google-services.json"
+      "googleServicesFile": "./google-services.json",
+      "versionCode": 3,
+      "permissions": [
+        "INTERNET",
+        "MODIFY_AUDIO_SETTINGS",
+        "VIBRATE",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_MEDIA_PLAYBACK",
+        "POST_NOTIFICATIONS",
+        "WAKE_LOCK"
+      ],
+      "blockedPermissions": [
+        "CAMERA",
+        "RECORD_AUDIO",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "READ_MEDIA_IMAGES",
+        "READ_MEDIA_VIDEO"
+      ]
     },
     "web": {
       "favicon": "./assets/images/final_quest_240x240.png",
@@ -52,7 +73,7 @@
     },
     "extra": {
       "router": {},
-      "backendUrl": "https://ggjfh5vjvuut7kh3tnnefceazjf2q6jg.app.specular.dev",
+      "backendUrl": "https://prod-proj-mttbudqdquje8djf3qn74-liwg5h36mq-ey.a.run.app",
       "oneSignalAppId": "41c0200e-69a3-4e4d-bc0d-0a53d0f6e65a"
     }
   }
