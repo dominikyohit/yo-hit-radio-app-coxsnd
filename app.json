@@ -1,3 +1,4 @@
+
 {
   "expo": {
     "name": "Yo Hit Radio",
@@ -59,6 +60,14 @@
       "expo-font",
       "expo-router",
       "expo-web-browser",
+      [
+        "react-native-track-player",
+        {
+          "android": {
+            "foregroundServiceType": "mediaPlayback"
+          }
+        }
+      ],
       [
         "onesignal-expo-plugin",
         {

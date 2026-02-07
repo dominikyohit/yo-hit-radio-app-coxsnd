@@ -1,127 +1,36 @@
 
-import { Audio, AVPlaybackStatus, InterruptionModeIOS, InterruptionModeAndroid } from 'expo-av';
+/**
+ * Global Audio Manager - Singleton pattern with react-native-track-player
+ * 
+ * MIGRATION: Replaced expo-av with react-native-track-player for:
+ * - ✅ True Android Foreground Service (mediaPlayback)
+ * - ✅ Persistent media notification with controls
+ * - ✅ Reliable background playback (survives app backgrounding)
+ * - ✅ Lock screen controls on both platforms
+ * - ✅ Better battery optimization compatibility
+ * 
+ * ANDROID: Uses native MediaSession with Foreground Service
+ * iOS: Uses AVAudioSession with background audio mode
+ */
+
+import TrackPlayer, {
+  AppKilledPlaybackBehavior,
+  Capability,
+  State,
+  Event,
+  Track,
+} from 'react-native-track-player';
 import { Platform } from 'react-native';
 
-/**
- * Global Audio Manager - Singleton pattern with ENHANCED background playback support
- * 
- * ANDROID: Full media notification with player controls (Play/Pause/Stop)
- * iOS: Lock screen controls with Now Playing metadata
- * 
- * Features:
- * - ✅ Background audio playback (continues when app is minimized/locked)
- * - ✅ Android media notification with controls (notification shade + lock screen)
- * - ✅ iOS lock screen controls with Now Playing metadata
- * - ✅ Audio focus management (DoNotMix mode)
- * - ✅ Continuous metadata refresh (even when paused)
- * - ✅ Optimized for low-bandwidth streaming
- */
 class AudioManager {
   private static instance: AudioManager;
-  private sound: Audio.Sound | null = null;
-  private isLiveStream: boolean = false;
-  private currentUri: string = '';
   private isInitialized: boolean = false;
-  private currentTitle: string = 'Yo Hit Radio';
-  private currentArtist: string = 'Live Stream';
-  private currentArtwork: string | undefined = undefined;
+  private currentTrackId: string | null = null;
+  private currentUri: string = '';
+  private isLiveStream: boolean = false;
 
   private constructor() {
-    this.initializeAudio();
-  }
-
-  /**
-   * Initialize audio session with FULL background playback support
-   * 
-   * CRITICAL CONFIGURATION:
-   * - staysActiveInBackground: true → Enables background playback
-   * - playsInSilentModeIOS: true → iOS plays even in silent mode
-   * - interruptionModeAndroid: DoNotMix → Android takes full audio focus (enables media notification)
-   * - interruptionModeIOS: DoNotMix → iOS takes full audio focus (enables lock screen controls)
-   * 
-   * ANDROID: This configuration automatically creates a media notification with controls
-   * iOS: This configuration enables lock screen Now Playing controls
-   */
-  private async initializeAudio(): Promise<void> {
-    try {
-      console.log('[AudioManager] 🎵 Initializing audio session for background playback');
-      console.log('[AudioManager] 📱 Platform:', Platform.OS);
-      
-      // CRITICAL: This configuration enables background playback AND media notifications
-      await Audio.setAudioModeAsync({
-        // BACKGROUND PLAYBACK (Both platforms)
-        staysActiveInBackground: true, // ✅ CRITICAL: Enables background playback
-        
-        // iOS CONFIGURATION
-        playsInSilentModeIOS: true, // ✅ Play even when device is in silent mode
-        allowsRecordingIOS: false, // We're not recording
-        interruptionModeIOS: InterruptionModeIOS.DoNotMix, // ✅ CRITICAL: Enables lock screen controls
-        
-        // ANDROID CONFIGURATION
-        shouldDuckAndroid: true, // Lower volume of other apps when playing
-        playThroughEarpieceAndroid: false, // Use speaker/headphones, not earpiece
-        interruptionModeAndroid: InterruptionModeAndroid.DoNotMix, // ✅ CRITICAL: Enables media notification
-      });
-
-      this.isInitialized = true;
-      
-      console.log('[AudioManager] ✅ Audio session initialized successfully');
-      console.log('[AudioManager] ✅ Background playback ENABLED');
-      console.log('[AudioManager] ✅ Audio focus: DoNotMix (full control)');
-      
-      if (Platform.OS === 'android') {
-        console.log('[AudioManager] 🤖 Android: Media notification will appear when playing');
-        console.log('[AudioManager] 🤖 Android: Notification controls: Play/Pause/Stop');
-        console.log('[AudioManager] 🤖 Android: Notification visible in shade + lock screen');
-      } else if (Platform.OS === 'ios') {
-        console.log('[AudioManager] 🍎 iOS: Lock screen controls enabled');
-        console.log('[AudioManager] 🍎 iOS: Now Playing metadata will update');
-      }
-    } catch (error) {
-      console.error('[AudioManager] ❌ Error initializing audio session:', error);
-    }
-  }
-
-  /**
-   * Update Now Playing metadata for lock screen and notification
-   * 
-   * iOS: Updates lock screen Now Playing info
-   * Android: Updates media notification title/artist/artwork
-   * 
-   * NOTE: expo-av automatically manages Now Playing metadata through the audio session.
-   * The metadata is displayed in:
-   * - Android: Media notification (notification shade + lock screen)
-   * - iOS: Lock screen Now Playing widget
-   */
-  private async updateNowPlayingInfo(title: string, artist: string, artwork?: string): Promise<void> {
-    try {
-      // Store current metadata
-      this.currentTitle = title;
-      this.currentArtist = artist;
-      this.currentArtwork = artwork;
-
-      if (this.sound) {
-        // expo-av automatically handles Now Playing metadata through the audio session
-        // The metadata is derived from:
-        // 1. Audio source URL
-        // 2. Playback state (playing/paused)
-        // 3. Audio session configuration (set in initializeAudio)
-        
-        // For live streams, the metadata updates automatically when we call this method
-        // The Android media notification and iOS lock screen will reflect these changes
-        
-        console.log('[AudioManager] 📝 Updated Now Playing metadata:', { title, artist });
-        
-        if (Platform.OS === 'android') {
-          console.log('[AudioManager] 🤖 Android: Media notification updated');
-          console.log('[AudioManager] 🤖 Android: Notification shows:', title, '-', artist);
-        } else if (Platform.OS === 'ios') {
-          console.log('[AudioManager] 🍎 iOS: Lock screen Now Playing updated');
-        }
-      }
-    } catch (error) {
-      console.error('[AudioManager] ❌ Error updating Now Playing info:', error);
-    }
+    // Initialization happens in setupPlayer()
   }
 
   public static getInstance(): AudioManager {
@@ -132,14 +41,95 @@ class AudioManager {
   }
 
   /**
+   * Setup TrackPlayer with background playback configuration
+   * 
+   * CRITICAL: This must be called before any playback operations.
+   * It configures the native audio session and foreground service.
+   * 
+   * ANDROID: Creates MediaSession and prepares Foreground Service
+   * iOS: Configures AVAudioSession for background audio
+   */
+  public async setupPlayer(): Promise<void> {
+    if (this.isInitialized) {
+      console.log('[AudioManager] ⚠️ TrackPlayer already initialized');
+      return;
+    }
+
+    try {
+      console.log('[AudioManager] 🎵 Initializing TrackPlayer for background playback');
+      console.log('[AudioManager] 📱 Platform:', Platform.OS);
+
+      // Setup player with background playback configuration
+      await TrackPlayer.setupPlayer({
+        maxCacheSize: 1024 * 10, // 10MB cache for stable streaming
+        waitForBuffer: true, // Wait for buffer before playing (prevents stuttering)
+      });
+
+      console.log('[AudioManager] ✅ TrackPlayer setup complete');
+
+      // Configure playback options
+      await TrackPlayer.updateOptions({
+        // Android configuration
+        android: {
+          // CRITICAL: Stop playback when app is killed by system
+          // Options: ContinuePlayback, PausePlayback, StopPlaybackAndRemoveNotification
+          appKilledPlaybackBehavior: AppKilledPlaybackBehavior.StopPlaybackAndRemoveNotification,
+        },
+
+        // Capabilities - what controls are available
+        capabilities: [
+          Capability.Play,
+          Capability.Pause,
+          Capability.Stop,
+        ],
+
+        // Compact capabilities - controls shown in collapsed notification
+        compactCapabilities: [
+          Capability.Play,
+          Capability.Pause,
+          Capability.Stop,
+        ],
+
+        // Progress update interval (in seconds)
+        progressUpdateEventInterval: 2,
+
+        // iOS specific
+        // alwaysPauseOnInterruption: true, // Pause on phone calls, alarms, etc.
+      });
+
+      console.log('[AudioManager] ✅ Playback options configured');
+      console.log('[AudioManager] ✅ Background playback ENABLED');
+      console.log('[AudioManager] 📱 Audio will continue when:');
+      console.log('[AudioManager]    • App goes to background');
+      console.log('[AudioManager]    • User opens another app');
+      console.log('[AudioManager]    • Screen locks');
+      console.log('[AudioManager]    • Device sleeps');
+
+      if (Platform.OS === 'android') {
+        console.log('[AudioManager] 🤖 Android: Foreground Service configured');
+        console.log('[AudioManager] 🤖 Android: Media notification will appear when playing');
+        console.log('[AudioManager] 🤖 Android: Notification controls: Play/Pause/Stop');
+        console.log('[AudioManager] 🤖 Android: Service type: mediaPlayback');
+      } else if (Platform.OS === 'ios') {
+        console.log('[AudioManager] 🍎 iOS: AVAudioSession configured for background audio');
+        console.log('[AudioManager] 🍎 iOS: Lock screen controls enabled');
+      }
+
+      this.isInitialized = true;
+    } catch (error) {
+      console.error('[AudioManager] ❌ Error setting up TrackPlayer:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Play audio from URI (live stream or on-demand track)
    * 
    * CRITICAL FEATURES:
    * ✅ Background playback (continues when app is minimized/locked)
    * ✅ Android media notification with controls (Play/Pause/Stop)
    * ✅ iOS lock screen controls with Now Playing metadata
-   * ✅ Audio focus management (DoNotMix mode)
-   * ✅ Optimized for low-bandwidth streaming
+   * ✅ Foreground Service on Android (survives battery optimization)
    * 
    * @param uri - Audio stream URL
    * @param isLiveStream - Whether this is a live stream (affects buffering behavior)
@@ -159,56 +149,53 @@ class AudioManager {
       console.log('[AudioManager] 📻 Stream:', uri);
       console.log('[AudioManager] 🎤 Title:', title);
       console.log('[AudioManager] 👤 Artist:', artist);
+      console.log('[AudioManager] 🖼️ Artwork:', artwork ? 'Yes' : 'No');
 
-      // Ensure audio session is initialized
+      // Ensure player is initialized
       if (!this.isInitialized) {
-        console.log('[AudioManager] ⚠️ Audio session not initialized, initializing now...');
-        await this.initializeAudio();
+        console.log('[AudioManager] ⚠️ TrackPlayer not initialized, initializing now...');
+        await this.setupPlayer();
       }
 
-      // Stop current audio if playing
-      await this.stopCurrentAudio();
+      // Reset player (clear queue)
+      await TrackPlayer.reset();
+      console.log('[AudioManager] 🔄 Player reset');
 
-      console.log('[AudioManager] 🔧 Creating audio player with background playback enabled');
+      // Create track object
+      const track: Track = {
+        id: `track-${Date.now()}`, // Unique ID for this track
+        url: uri,
+        title: title,
+        artist: artist,
+        artwork: artwork, // Optional artwork URL
+        isLiveStream: isLiveStream, // Important for live streams
+      };
 
-      // CRITICAL: Load and play audio with background playback configuration
-      const { sound } = await Audio.Sound.createAsync(
-        { uri },
-        {
-          shouldPlay: true, // ✅ Start playing immediately
-          isLooping: false, // Live streams don't loop
-          volume: 1.0,
-          isMuted: false,
-          rate: 1.0,
-          shouldCorrectPitch: true,
-          progressUpdateIntervalMillis: 1000, // Update progress every second
-          // OPTIMIZATION: Adaptive buffering for stable playback on slow networks
-        },
-        this.onPlaybackStatusUpdate
-      );
+      // Add track to queue
+      await TrackPlayer.add(track);
+      console.log('[AudioManager] ➕ Track added to queue');
 
-      this.sound = sound;
-      this.isLiveStream = isLiveStream;
+      // Start playback
+      await TrackPlayer.play();
+      console.log('[AudioManager] ▶️ Playback started');
+
+      // Store current track info
+      this.currentTrackId = track.id;
       this.currentUri = uri;
-
-      // Update Now Playing metadata for lock screen and notification
-      await this.updateNowPlayingInfo(title, artist, artwork);
+      this.isLiveStream = isLiveStream;
 
       console.log('[AudioManager] ✅ Playback started successfully');
       console.log('[AudioManager] ✅ Background playback ACTIVE');
-      console.log('[AudioManager] 📱 Audio will continue when:');
-      console.log('[AudioManager]    • App goes to background');
-      console.log('[AudioManager]    • User opens another app');
-      console.log('[AudioManager]    • Screen locks');
-      console.log('[AudioManager]    • Device sleeps');
-      
+
       if (Platform.OS === 'android') {
+        console.log('[AudioManager] 🤖 Android: Foreground Service NOW RUNNING');
         console.log('[AudioManager] 🤖 Android: Media notification NOW VISIBLE');
+        console.log('[AudioManager] 🤖 Android: Notification shows:', title, '-', artist);
         console.log('[AudioManager] 🤖 Android: Controls available: Play/Pause/Stop');
         console.log('[AudioManager] 🤖 Android: Notification visible in:');
         console.log('[AudioManager]    • Notification shade (swipe down)');
         console.log('[AudioManager]    • Lock screen');
-        console.log('[AudioManager] 🤖 Android: Audio focus acquired (DoNotMix)');
+        console.log('[AudioManager] 🤖 Android: Service survives battery optimization');
       } else if (Platform.OS === 'ios') {
         console.log('[AudioManager] 🍎 iOS: Lock screen controls NOW ACTIVE');
         console.log('[AudioManager] 🍎 iOS: Now Playing metadata updated');
@@ -220,99 +207,27 @@ class AudioManager {
   }
 
   /**
-   * Playback status update callback
-   * 
-   * Handles:
-   * - Audio focus changes
-   * - Interruptions (phone calls, alarms, etc.)
-   * - Buffering status
-   * - Errors
-   * 
-   * This callback is called automatically by expo-av during playback
-   */
-  private onPlaybackStatusUpdate = (status: AVPlaybackStatus): void => {
-    if (status.isLoaded) {
-      // Track finished playing
-      if (status.didJustFinish && !status.isLooping) {
-        console.log('[AudioManager] 🏁 Playback finished');
-      }
-      
-      // Playback error
-      if (status.error) {
-        console.error('[AudioManager] ❌ Playback error:', status.error);
-      }
-      
-      // Buffering status (normal for live streams on slow networks)
-      if (status.isBuffering) {
-        console.log('[AudioManager] ⏳ Buffering... (normal on slow networks)');
-      }
-      
-      // Audio is playing - background playback is active
-      if (status.isPlaying) {
-        // Background playback is active
-        // Media notification is visible (Android)
-        // Lock screen controls are active (iOS)
-      }
-    } else {
-      // Audio not loaded
-      if (status.error) {
-        console.error('[AudioManager] ❌ Playback status error:', status.error);
-      }
-    }
-  };
-
-  /**
-   * Stop and unload current audio
-   * 
-   * ANDROID: Removes media notification from notification shade and lock screen
-   * iOS: Clears lock screen Now Playing controls
-   */
-  public async stopCurrentAudio(): Promise<void> {
-    if (this.sound) {
-      try {
-        console.log('[AudioManager] 🛑 Stopping current audio');
-        await this.sound.stopAsync();
-        await this.sound.unloadAsync();
-        
-        console.log('[AudioManager] ✅ Audio stopped');
-        
-        if (Platform.OS === 'android') {
-          console.log('[AudioManager] 🤖 Android: Media notification REMOVED');
-        } else if (Platform.OS === 'ios') {
-          console.log('[AudioManager] 🍎 iOS: Lock screen controls CLEARED');
-        }
-      } catch (error) {
-        console.error('[AudioManager] ❌ Error stopping audio:', error);
-      }
-      this.sound = null;
-      this.isLiveStream = false;
-      this.currentUri = '';
-    }
-  }
-
-  /**
    * Pause current audio
    * 
    * ANDROID: Media notification remains visible with "Play" button
    * iOS: Lock screen controls remain active
    */
   public async pauseAudio(): Promise<void> {
-    if (this.sound) {
-      try {
-        console.log('[AudioManager] ⏸️ Pausing audio');
-        await this.sound.pauseAsync();
-        
-        console.log('[AudioManager] ✅ Audio paused');
-        
-        if (Platform.OS === 'android') {
-          console.log('[AudioManager] 🤖 Android: Media notification STILL VISIBLE');
-          console.log('[AudioManager] 🤖 Android: Notification shows "Play" button');
-        } else if (Platform.OS === 'ios') {
-          console.log('[AudioManager] 🍎 iOS: Lock screen controls STILL ACTIVE');
-        }
-      } catch (error) {
-        console.error('[AudioManager] ❌ Error pausing audio:', error);
+    try {
+      console.log('[AudioManager] ⏸️ Pausing audio');
+      await TrackPlayer.pause();
+
+      console.log('[AudioManager] ✅ Audio paused');
+
+      if (Platform.OS === 'android') {
+        console.log('[AudioManager] 🤖 Android: Media notification STILL VISIBLE');
+        console.log('[AudioManager] 🤖 Android: Notification shows "Play" button');
+        console.log('[AudioManager] 🤖 Android: Foreground Service STILL RUNNING');
+      } else if (Platform.OS === 'ios') {
+        console.log('[AudioManager] 🍎 iOS: Lock screen controls STILL ACTIVE');
       }
+    } catch (error) {
+      console.error('[AudioManager] ❌ Error pausing audio:', error);
     }
   }
 
@@ -323,22 +238,50 @@ class AudioManager {
    * iOS: Lock screen controls update to show "Pause" button
    */
   public async resumeAudio(): Promise<void> {
-    if (this.sound) {
-      try {
-        console.log('[AudioManager] ▶️ Resuming audio');
-        await this.sound.playAsync();
-        
-        console.log('[AudioManager] ✅ Audio resumed');
-        console.log('[AudioManager] ✅ Background playback ACTIVE');
-        
-        if (Platform.OS === 'android') {
-          console.log('[AudioManager] 🤖 Android: Media notification updated to "Pause"');
-        } else if (Platform.OS === 'ios') {
-          console.log('[AudioManager] 🍎 iOS: Lock screen controls updated to "Pause"');
-        }
-      } catch (error) {
-        console.error('[AudioManager] ❌ Error resuming audio:', error);
+    try {
+      console.log('[AudioManager] ▶️ Resuming audio');
+      await TrackPlayer.play();
+
+      console.log('[AudioManager] ✅ Audio resumed');
+      console.log('[AudioManager] ✅ Background playback ACTIVE');
+
+      if (Platform.OS === 'android') {
+        console.log('[AudioManager] 🤖 Android: Media notification updated to "Pause"');
+        console.log('[AudioManager] 🤖 Android: Foreground Service RUNNING');
+      } else if (Platform.OS === 'ios') {
+        console.log('[AudioManager] 🍎 iOS: Lock screen controls updated to "Pause"');
       }
+    } catch (error) {
+      console.error('[AudioManager] ❌ Error resuming audio:', error);
+    }
+  }
+
+  /**
+   * Stop and clear current audio
+   * 
+   * ANDROID: Removes media notification and stops Foreground Service
+   * iOS: Clears lock screen Now Playing controls
+   */
+  public async stopCurrentAudio(): Promise<void> {
+    try {
+      console.log('[AudioManager] 🛑 Stopping current audio');
+      await TrackPlayer.stop();
+      await TrackPlayer.reset(); // Clear the queue
+
+      this.currentTrackId = null;
+      this.currentUri = '';
+      this.isLiveStream = false;
+
+      console.log('[AudioManager] ✅ Audio stopped');
+
+      if (Platform.OS === 'android') {
+        console.log('[AudioManager] 🤖 Android: Media notification REMOVED');
+        console.log('[AudioManager] 🤖 Android: Foreground Service STOPPED');
+      } else if (Platform.OS === 'ios') {
+        console.log('[AudioManager] 🍎 iOS: Lock screen controls CLEARED');
+      }
+    } catch (error) {
+      console.error('[AudioManager] ❌ Error stopping audio:', error);
     }
   }
 
@@ -346,12 +289,81 @@ class AudioManager {
    * Check if audio is currently playing
    */
   public async isPlaying(): Promise<boolean> {
-    if (!this.sound) return false;
     try {
-      const status = await this.sound.getStatusAsync();
-      return status.isLoaded && status.isPlaying;
-    } catch {
+      const state = await TrackPlayer.getState();
+      return state === State.Playing;
+    } catch (error) {
+      console.error('[AudioManager] ❌ Error checking playback state:', error);
       return false;
+    }
+  }
+
+  /**
+   * Get current playback state
+   */
+  public async getPlaybackState(): Promise<State> {
+    try {
+      return await TrackPlayer.getState();
+    } catch (error) {
+      console.error('[AudioManager] ❌ Error getting playback state:', error);
+      return State.None;
+    }
+  }
+
+  /**
+   * Get current track
+   */
+  public async getCurrentTrack(): Promise<Track | undefined> {
+    try {
+      const trackIndex = await TrackPlayer.getActiveTrackIndex();
+      if (trackIndex !== undefined && trackIndex !== null) {
+        const track = await TrackPlayer.getTrack(trackIndex);
+        return track || undefined;
+      }
+      return undefined;
+    } catch (error) {
+      console.error('[AudioManager] ❌ Error getting current track:', error);
+      return undefined;
+    }
+  }
+
+  /**
+   * Update metadata for currently playing audio
+   * 
+   * Use this to update Now Playing info when song/show changes during playback
+   * 
+   * ANDROID: Updates media notification title/artist/artwork
+   * iOS: Updates lock screen Now Playing metadata
+   * 
+   * @param title - New track/show title
+   * @param artist - New artist/station name
+   * @param artwork - Optional new artwork URL
+   */
+  public async updateMetadata(title: string, artist: string, artwork?: string): Promise<void> {
+    try {
+      console.log('[AudioManager] 📝 Updating metadata:', { title, artist, artwork: artwork ? 'Yes' : 'No' });
+
+      const trackIndex = await TrackPlayer.getActiveTrackIndex();
+      if (trackIndex !== undefined && trackIndex !== null) {
+        // Update the current track's metadata
+        await TrackPlayer.updateMetadataForTrack(trackIndex, {
+          title: title,
+          artist: artist,
+          artwork: artwork,
+        });
+
+        console.log('[AudioManager] ✅ Metadata updated successfully');
+
+        if (Platform.OS === 'android') {
+          console.log('[AudioManager] 🤖 Android: Media notification metadata updated');
+        } else if (Platform.OS === 'ios') {
+          console.log('[AudioManager] 🍎 iOS: Lock screen Now Playing metadata updated');
+        }
+      } else {
+        console.log('[AudioManager] ⚠️ No active track to update metadata');
+      }
+    } catch (error) {
+      console.error('[AudioManager] ❌ Error updating metadata:', error);
     }
   }
 
@@ -373,50 +385,54 @@ class AudioManager {
    * Set volume (0.0 to 1.0)
    */
   public async setVolume(volume: number): Promise<void> {
-    if (this.sound) {
-      try {
-        await this.sound.setVolumeAsync(Math.max(0, Math.min(1, volume)));
-      } catch (error) {
-        console.error('[AudioManager] Error setting volume:', error);
-      }
+    try {
+      await TrackPlayer.setVolume(Math.max(0, Math.min(1, volume)));
+      console.log('[AudioManager] 🔊 Volume set to:', volume);
+    } catch (error) {
+      console.error('[AudioManager] ❌ Error setting volume:', error);
     }
   }
 
   /**
-   * Get current playback status
+   * Seek to position (in seconds)
+   * Note: Not applicable for live streams
    */
-  public async getStatus(): Promise<AVPlaybackStatus | null> {
-    if (this.sound) {
-      try {
-        return await this.sound.getStatusAsync();
-      } catch (error) {
-        console.error('[AudioManager] Error getting status:', error);
-        return null;
+  public async seekTo(position: number): Promise<void> {
+    try {
+      if (!this.isLiveStream) {
+        await TrackPlayer.seekTo(position);
+        console.log('[AudioManager] ⏩ Seeked to position:', position);
+      } else {
+        console.log('[AudioManager] ⚠️ Cannot seek in live stream');
       }
+    } catch (error) {
+      console.error('[AudioManager] ❌ Error seeking:', error);
     }
-    return null;
   }
 
   /**
-   * Update metadata for currently playing audio
-   * 
-   * Use this to update Now Playing info when song/show changes during playback
-   * 
-   * ANDROID: Updates media notification title/artist/artwork
-   * iOS: Updates lock screen Now Playing metadata
-   * 
-   * @param title - New track/show title
-   * @param artist - New artist/station name
-   * @param artwork - Optional new artwork URL
+   * Get current position (in seconds)
    */
-  public async updateMetadata(title: string, artist: string, artwork?: string): Promise<void> {
-    console.log('[AudioManager] 📝 Updating metadata:', { title, artist });
-    await this.updateNowPlayingInfo(title, artist, artwork);
-    
-    if (Platform.OS === 'android') {
-      console.log('[AudioManager] 🤖 Android: Media notification metadata updated');
-    } else if (Platform.OS === 'ios') {
-      console.log('[AudioManager] 🍎 iOS: Lock screen Now Playing metadata updated');
+  public async getPosition(): Promise<number> {
+    try {
+      const position = await TrackPlayer.getPosition();
+      return position;
+    } catch (error) {
+      console.error('[AudioManager] ❌ Error getting position:', error);
+      return 0;
+    }
+  }
+
+  /**
+   * Get track duration (in seconds)
+   */
+  public async getDuration(): Promise<number> {
+    try {
+      const duration = await TrackPlayer.getDuration();
+      return duration;
+    } catch (error) {
+      console.error('[AudioManager] ❌ Error getting duration:', error);
+      return 0;
     }
   }
 }
