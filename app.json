@@ -1,8 +1,7 @@
-
 {
   "expo": {
     "name": "Yo Hit Radio",
-    "slug": "yo-hit-radio-app-coxsnd",
+    "slug": "Yo Hit Radio",
     "version": "1.0.2",
     "orientation": "portrait",
     "icon": "./assets/images/logo 192 (1).png",
