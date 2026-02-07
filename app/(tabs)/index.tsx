@@ -18,6 +18,7 @@ import { OptimizedImage } from '@/components/OptimizedImage';
 import { fetchWithTimeout, isNetworkError } from '@/utils/networkHelpers';
 import { saveMetadataCache, loadMetadataCache } from '@/utils/metadataCache';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Linking from 'expo-linking';
 import {
   View,
   Text,
@@ -606,14 +607,20 @@ export default function HomeScreen() {
   };
 
   const dismissBackgroundInfoPopup = async () => {
-    console.log('[Home] User dismissed background info popup');
+    console.log('[Home] User dismissed background info popup and will be redirected to App Settings');
     setShowBackgroundInfoPopup(false);
     
     try {
       await AsyncStorage.setItem(BACKGROUND_INFO_SHOWN_KEY, 'true');
       console.log('[Home] Background info popup marked as shown');
+      
+      // Open Android App Settings (App Info screen)
+      if (Platform.OS === 'android') {
+        console.log('[Home] Opening Android App Settings for Yo Hit Radio');
+        await Linking.openSettings();
+      }
     } catch (error) {
-      console.error('[Home] Error saving background info popup status:', error);
+      console.error('[Home] Error saving background info popup status or opening settings:', error);
     }
   };
 
@@ -1050,7 +1057,7 @@ export default function HomeScreen() {
         </ScrollView>
       </SafeAreaView>
 
-      {/* Background Info Popup Modal */}
+      {/* Background Info Popup Modal - UPDATED MESSAGE */}
       <Modal
         visible={showBackgroundInfoPopup}
         transparent={true}
@@ -1061,8 +1068,13 @@ export default function HomeScreen() {
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Radyo a an Background (Android)</Text>
             <Text style={styles.modalMessage}>
-              Pou radyo a kontinye jwe an background menm lè ou soti sou app la, ale nan:{'\n\n'}
-              Settings → Apps → Yo Hit Radio → Battery → chwazi "Unrestricted" (Non Restreinte).
+              Pou radyo a kontinye jwe an background menm lè ou soti sou app la, tanpri retire restriksyon batri a pou Yo Hit Radio.{'\n\n'}
+              Ale nan:{'\n'}
+              Settings / Paramètres → Apps / Applications → Yo Hit Radio → Battery / Batterie{'\n\n'}
+              Epi chwazi youn nan opsyon sa yo:{'\n'}
+              Unrestricted / Non restreinte{'\n'}
+              Don&apos;t optimize / Ne pas optimiser{'\n'}
+              No restrictions / Aucune restriction
             </Text>
             <TouchableOpacity
               style={styles.modalButton}
