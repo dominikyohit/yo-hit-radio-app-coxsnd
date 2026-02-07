@@ -128,7 +128,7 @@ export default function EventDetailsScreen() {
     };
 
     fetchFullEventData();
-  }, [eventId, initialTicketLink]);
+  }, [eventId, initialTicketLink, params.title, params.event_date_raw, params.event_location, params.event_price, params.event_artists, params.flyer_image]);
 
   const handleBuyTicket = async () => {
     const ticketUrl = eventData?.ticket_link;

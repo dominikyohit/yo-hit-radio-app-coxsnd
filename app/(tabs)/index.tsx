@@ -132,9 +132,9 @@ interface WordPressScheduleItem {
     sort_order?: number;
   };
   _embedded?: {
-    'wp:featuredmedia'?: Array<{
+    'wp:featuredmedia'?: {
       source_url?: string;
-    }>;
+    }[];
   };
 }
 
@@ -244,7 +244,7 @@ export default function HomeScreen() {
   }, [isPlaying, rotation]);
 
   const fetchMetadata = useCallback(async () => {
-    console.log('[Home] Fetching metadata from AzuraCast API...');
+    console.log('[Home] 🔄 Fetching metadata from AzuraCast API...');
     try {
       // Use fetchWithTimeout for network resilience
       const response = await fetchWithTimeout(
@@ -254,7 +254,7 @@ export default function HomeScreen() {
       );
       
       const data = await response.json();
-      console.log('[Home] Fetched metadata from AzuraCast API:', data);
+      console.log('[Home] ✅ Fetched metadata from AzuraCast API');
 
       const title = data?.now_playing?.song?.title || '';
       const artist = data?.now_playing?.song?.artist || '';
@@ -273,10 +273,13 @@ export default function HomeScreen() {
         await saveMetadataCache(fallbackMetadata);
         
         // Update lock screen metadata even when paused
+        // This keeps the notification/lock screen up to date
         await audioManager.updateMetadata(
           fallbackMetadata.displayTitle,
           fallbackMetadata.displayArtist
         );
+        
+        console.log('[Home] 📝 Using fallback metadata');
       } else {
         const newMetadata = {
           displayTitle: title,
@@ -290,24 +293,32 @@ export default function HomeScreen() {
         
         // Update lock screen metadata even when paused
         // This ensures Now Playing info stays current
+        // CRITICAL: Pass artwork URL for Android notification and iOS lock screen
         await audioManager.updateMetadata(
           newMetadata.displayTitle,
           newMetadata.displayArtist,
           newMetadata.coverImage || undefined
         );
         
-        console.log('[Home] Updated lock screen metadata and cache:', {
+        console.log('[Home] 📝 Updated metadata:', {
           title: newMetadata.displayTitle,
           artist: newMetadata.displayArtist,
+          artwork: newMetadata.coverImage ? 'Yes' : 'No',
         });
+        
+        if (Platform.OS === 'android') {
+          console.log('[Home] 🤖 Android: Media notification metadata updated');
+        } else if (Platform.OS === 'ios') {
+          console.log('[Home] 🍎 iOS: Lock screen Now Playing metadata updated');
+        }
       }
     } catch (error) {
-      console.error('[Home] Error fetching metadata from AzuraCast API:', error);
+      console.error('[Home] ❌ Error fetching metadata from AzuraCast API:', error);
       
       // On network error, keep existing metadata (don't clear it)
       // This prevents blank screens on slow networks
       if (isNetworkError(error)) {
-        console.log('[Home] Network error - keeping existing metadata visible');
+        console.log('[Home] ⚠️ Network error - keeping existing metadata visible');
       }
     }
   }, [audioManager]);
@@ -565,7 +576,7 @@ export default function HomeScreen() {
         metadataInterval.current = null;
       }
     };
-  }, []); // Empty dependency array - only runs once on mount
+  }, [fetchMetadata]); // Include fetchMetadata dependency
 
   // Fetch schedule on mount
   useEffect(() => {
@@ -627,47 +638,61 @@ export default function HomeScreen() {
   const togglePlayback = async () => {
     try {
       if (isPlaying) {
-        console.log('[Home] User tapped Stop button - stopping audio but keeping metadata visible');
+        console.log('[Home] 🛑 User tapped Stop button');
         await audioManager.stopCurrentAudio();
         setIsPlaying(false);
-        console.log('[Home] Audio stopped - metadata remains visible and continues refreshing');
-        console.log('[Home] Media notification removed (Android)');
-        console.log('[Home] Lock screen controls cleared');
+        
+        console.log('[Home] ✅ Audio stopped');
+        console.log('[Home] 📝 Metadata remains visible and continues refreshing');
+        
+        if (Platform.OS === 'android') {
+          console.log('[Home] 🤖 Android: Media notification REMOVED');
+        } else if (Platform.OS === 'ios') {
+          console.log('[Home] 🍎 iOS: Lock screen controls CLEARED');
+        }
       } else {
-        console.log('[Home] User tapped Listen Live button');
+        console.log('[Home] ▶️ User tapped Listen Live button');
         
         // Check if we should show the background info popup (first time only, Android only)
         await checkAndShowBackgroundInfoPopup();
         
         setLoading(true);
         
+        // Prepare metadata for playback
         const title = metadata?.displayTitle || 'Yo Hit Radio – Live Stream';
         const artist = metadata?.displayArtist || 'Live Stream';
+        const artwork = metadata?.coverImage || undefined;
         
-        console.log('[Home] Starting live stream with background playback enabled');
-        await audioManager.playAudio(STREAM_URL, true, title, artist);
+        console.log('[Home] 🎵 Starting live stream with background playback');
+        console.log('[Home] 📝 Metadata:', { title, artist, artwork: artwork ? 'Yes' : 'No' });
+        
+        // Start playback with metadata (including artwork for notification)
+        await audioManager.playAudio(STREAM_URL, true, title, artist, artwork);
         setIsPlaying(true);
         setLoading(false);
         
-        console.log('[Home] Live stream started successfully');
-        console.log('[Home] Background playback active - audio will continue when:');
-        console.log('[Home]   ✓ App goes to background');
-        console.log('[Home]   ✓ User opens another app (WhatsApp, Facebook, etc.)');
-        console.log('[Home]   ✓ Screen turns off or device locks');
-        console.log('[Home]   ✓ Device sleeps/hibernates');
-        console.log('[Home] Lock screen controls available (Play/Pause)');
+        console.log('[Home] ✅ Live stream started successfully');
+        console.log('[Home] ✅ Background playback ACTIVE');
+        console.log('[Home] 📱 Audio will continue when:');
+        console.log('[Home]    • App goes to background');
+        console.log('[Home]    • User opens another app (WhatsApp, Facebook, etc.)');
+        console.log('[Home]    • Screen turns off or device locks');
+        console.log('[Home]    • Device sleeps/hibernates');
         
         if (Platform.OS === 'android') {
-          console.log('[Home] Android: Media notification visible with Play/Pause controls');
-          console.log('[Home] Android: Audio focus acquired (DoNotMix mode)');
-          console.log('[Home] Android: MediaSession active for Android Auto support');
+          console.log('[Home] 🤖 Android: Media notification NOW VISIBLE');
+          console.log('[Home] 🤖 Android: Notification shows:', title, '-', artist);
+          console.log('[Home] 🤖 Android: Controls: Play/Pause/Stop');
+          console.log('[Home] 🤖 Android: Visible in notification shade + lock screen');
+          console.log('[Home] 🤖 Android: Audio focus acquired (DoNotMix mode)');
         } else if (Platform.OS === 'ios') {
-          console.log('[Home] iOS: AVAudioSession configured for background playback');
-          console.log('[Home] iOS: Now Playing info updated on lock screen');
+          console.log('[Home] 🍎 iOS: Lock screen controls NOW ACTIVE');
+          console.log('[Home] 🍎 iOS: Now Playing metadata updated');
+          console.log('[Home] 🍎 iOS: AVAudioSession configured for background playback');
         }
       }
     } catch (error) {
-      console.error('[Home] Error toggling playback:', error);
+      console.error('[Home] ❌ Error toggling playback:', error);
       setLoading(false);
       setIsPlaying(false);
     }
