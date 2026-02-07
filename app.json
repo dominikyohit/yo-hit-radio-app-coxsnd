@@ -1,3 +1,4 @@
+
 {
   "expo": {
     "name": "Yo Hit Radio",
@@ -34,13 +35,12 @@
       "googleServicesFile": "./google-services.json",
       "versionCode": 3,
       "permissions": [
-        "INTERNET",
-        "MODIFY_AUDIO_SETTINGS",
-        "VIBRATE",
+        "POST_NOTIFICATIONS",
         "FOREGROUND_SERVICE",
         "FOREGROUND_SERVICE_MEDIA_PLAYBACK",
-        "POST_NOTIFICATIONS",
-        "WAKE_LOCK"
+        "WAKE_LOCK",
+        "MODIFY_AUDIO_SETTINGS",
+        "INTERNET"
       ],
       "blockedPermissions": [
         "CAMERA",
