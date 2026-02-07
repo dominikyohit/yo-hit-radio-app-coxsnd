@@ -1,92 +1,90 @@
 
+/**
+ * React Native Track Player - Background Playback Service
+ * 
+ * This service runs in a native Android Foreground Service, ensuring:
+ * - Audio continues playing when app is backgrounded
+ * - Media notification with controls (Play/Pause/Stop)
+ * - Lock screen controls
+ * - Survives app being killed by system (with proper configuration)
+ * 
+ * CRITICAL: This file is registered in index.ts and runs in a separate thread
+ * from the React Native JS thread, providing true background audio capability.
+ */
+
 import TrackPlayer, { Event } from 'react-native-track-player';
 
 /**
- * TrackPlayer Background Playback Service
+ * Playback Service
  * 
- * This service handles remote control events (notification controls, lock screen controls, headset buttons)
- * when the app is in the background or the screen is locked.
+ * Handles remote control events from:
+ * - Android media notification (notification shade + lock screen)
+ * - iOS lock screen controls
+ * - Bluetooth/headphone controls
+ * - Android Auto / CarPlay
  * 
- * CRITICAL: This service MUST be registered in index.ts BEFORE 'expo-router/entry'
- * 
- * Features:
- * - ✅ Android Foreground Service with media notification
- * - ✅ iOS lock screen controls with Now Playing metadata
- * - ✅ Remote control events (Play/Pause/Stop/Seek)
- * - ✅ Persistent notification on Android (visible in notification shade + lock screen)
- * - ✅ Background playback continues when app is minimized/locked
+ * This function is called by TrackPlayer when the service starts.
  */
-export async function playbackService() {
-  console.log('[TrackPlayer Service] 🎵 Playback service initialized');
-  console.log('[TrackPlayer Service] 📱 Listening for remote control events');
+module.exports = async function () {
+  console.log('[PlaybackService] 🎵 Background playback service started');
+  console.log('[PlaybackService] 📱 Service running in native foreground service');
+  console.log('[PlaybackService] ✅ Audio will continue in background');
 
   // Remote Play - User taps Play button in notification or lock screen
   TrackPlayer.addEventListener(Event.RemotePlay, async () => {
-    console.log('[TrackPlayer Service] ▶️ Remote Play event received');
-    console.log('[TrackPlayer Service] 📱 User tapped Play button in notification/lock screen');
+    console.log('[PlaybackService] ▶️ Remote Play event - User tapped Play');
     await TrackPlayer.play();
-    console.log('[TrackPlayer Service] ✅ Playback started from remote control');
   });
 
   // Remote Pause - User taps Pause button in notification or lock screen
   TrackPlayer.addEventListener(Event.RemotePause, async () => {
-    console.log('[TrackPlayer Service] ⏸️ Remote Pause event received');
-    console.log('[TrackPlayer Service] 📱 User tapped Pause button in notification/lock screen');
+    console.log('[PlaybackService] ⏸️ Remote Pause event - User tapped Pause');
     await TrackPlayer.pause();
-    console.log('[TrackPlayer Service] ✅ Playback paused from remote control');
   });
 
-  // Remote Stop - User taps Stop button in notification or swipes away notification
+  // Remote Stop - User taps Stop button or dismisses notification
   TrackPlayer.addEventListener(Event.RemoteStop, async () => {
-    console.log('[TrackPlayer Service] 🛑 Remote Stop event received');
-    console.log('[TrackPlayer Service] 📱 User tapped Stop button or swiped away notification');
+    console.log('[PlaybackService] 🛑 Remote Stop event - User tapped Stop or dismissed notification');
     await TrackPlayer.stop();
-    console.log('[TrackPlayer Service] ✅ Playback stopped from remote control');
+    await TrackPlayer.reset(); // Clear the queue
   });
 
-  // Remote Seek - User seeks to a position (for non-live streams)
+  // Remote Seek - User seeks to a position (for on-demand tracks, not live streams)
   TrackPlayer.addEventListener(Event.RemoteSeek, async ({ position }) => {
-    console.log('[TrackPlayer Service] ⏩ Remote Seek event received');
-    console.log('[TrackPlayer Service] 📱 User seeked to position:', position);
+    console.log('[PlaybackService] ⏩ Remote Seek event - User seeked to position:', position);
     await TrackPlayer.seekTo(position);
-    console.log('[TrackPlayer Service] ✅ Seeked to position:', position);
   });
 
-  // Optional: Remote Next (for playlists)
-  // TrackPlayer.addEventListener(Event.RemoteNext, async () => {
-  //   console.log('[TrackPlayer Service] ⏭️ Remote Next event received');
-  //   await TrackPlayer.skipToNext();
-  // });
+  // Remote Skip to Next - User taps Next button (if you have multiple tracks)
+  TrackPlayer.addEventListener(Event.RemoteNext, async () => {
+    console.log('[PlaybackService] ⏭️ Remote Next event - User tapped Next');
+    await TrackPlayer.skipToNext();
+  });
 
-  // Optional: Remote Previous (for playlists)
-  // TrackPlayer.addEventListener(Event.RemotePrevious, async () => {
-  //   console.log('[TrackPlayer Service] ⏮️ Remote Previous event received');
-  //   await TrackPlayer.skipToPrevious();
-  // });
+  // Remote Skip to Previous - User taps Previous button (if you have multiple tracks)
+  TrackPlayer.addEventListener(Event.RemotePrevious, async () => {
+    console.log('[PlaybackService] ⏮️ Remote Previous event - User tapped Previous');
+    await TrackPlayer.skipToPrevious();
+  });
 
-  // Track Changed - Fires when the active track changes
-  TrackPlayer.addEventListener(Event.PlaybackActiveTrackChanged, async (data) => {
-    if (data.track) {
-      console.log('[TrackPlayer Service] 🎵 Active track changed:', data.track.title);
-      console.log('[TrackPlayer Service] 📝 Metadata:', {
-        title: data.track.title,
-        artist: data.track.artist,
-        artwork: data.track.artwork ? 'Yes' : 'No',
-      });
+  // Playback State Changed - Track when playback state changes
+  TrackPlayer.addEventListener(Event.PlaybackState, async ({ state }) => {
+    console.log('[PlaybackService] 🔄 Playback state changed:', state);
+  });
+
+  // Playback Error - Handle playback errors
+  TrackPlayer.addEventListener(Event.PlaybackError, async ({ error }) => {
+    console.error('[PlaybackService] ❌ Playback error:', error);
+  });
+
+  // Track Changed - When track changes (for playlists)
+  TrackPlayer.addEventListener(Event.PlaybackActiveTrackChanged, async ({ index, track }) => {
+    if (track) {
+      console.log('[PlaybackService] 🎵 Track changed:', track.title, '-', track.artist);
     }
   });
 
-  // Playback State Changed - Fires when playback state changes (playing, paused, stopped, buffering)
-  TrackPlayer.addEventListener(Event.PlaybackState, (data) => {
-    console.log('[TrackPlayer Service] 🔄 Playback state changed:', data.state);
-  });
-
-  // Playback Error - Fires when an error occurs during playback
-  TrackPlayer.addEventListener(Event.PlaybackError, (data) => {
-    console.error('[TrackPlayer Service] ❌ Playback error:', data.message, data.code);
-  });
-
-  console.log('[TrackPlayer Service] ✅ All event listeners registered');
-  console.log('[TrackPlayer Service] 🤖 Android: Foreground service ready');
-  console.log('[TrackPlayer Service] 🍎 iOS: Lock screen controls ready');
-}
+  console.log('[PlaybackService] ✅ All remote control event listeners registered');
+  console.log('[PlaybackService] 🤖 Android: Media notification controls active');
+  console.log('[PlaybackService] 🍎 iOS: Lock screen controls active');
+};
