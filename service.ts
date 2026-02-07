@@ -12,6 +12,7 @@
  * from the React Native JS thread, providing true background audio capability.
  */
 
+// eslint-disable-next-line import/no-unresolved
 import TrackPlayer, { Event } from 'react-native-track-player';
 
 /**
