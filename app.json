@@ -50,7 +50,6 @@
       ]
     },
     "web": {
-      "favicon": "./assets/images/final_quest_240x240.png",
       "bundler": "metro"
     },
     "plugins": [
