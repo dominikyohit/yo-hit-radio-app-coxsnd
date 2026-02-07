@@ -35,12 +35,13 @@
       "googleServicesFile": "./google-services.json",
       "versionCode": 3,
       "permissions": [
-        "POST_NOTIFICATIONS",
+        "INTERNET",
+        "MODIFY_AUDIO_SETTINGS",
+        "VIBRATE",
         "FOREGROUND_SERVICE",
         "FOREGROUND_SERVICE_MEDIA_PLAYBACK",
-        "WAKE_LOCK",
-        "MODIFY_AUDIO_SETTINGS",
-        "INTERNET"
+        "POST_NOTIFICATIONS",
+        "WAKE_LOCK"
       ],
       "blockedPermissions": [
         "CAMERA",
@@ -59,6 +60,14 @@
       "expo-font",
       "expo-router",
       "expo-web-browser",
+      [
+        "react-native-track-player",
+        {
+          "android": {
+            "foregroundServiceType": "mediaPlayback"
+          }
+        }
+      ],
       [
         "onesignal-expo-plugin",
         {
