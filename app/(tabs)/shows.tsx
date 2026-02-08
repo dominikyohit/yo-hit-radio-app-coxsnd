@@ -1,5 +1,5 @@
 
-import { colors } from '@/styles/commonStyles';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -10,11 +10,21 @@ import {
   ImageSourcePropType,
   Image,
 } from 'react-native';
-import { IconSymbol } from '@/components/IconSymbol';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { decodeHtmlEntities } from '@/utils/htmlDecoder';
 import { LinearGradient } from 'expo-linear-gradient';
+import { colors } from '@/styles/commonStyles';
+import { IconSymbol } from '@/components/IconSymbol';
+import { decodeHtmlEntities } from '@/utils/htmlDecoder';
+
+// WordPress API endpoint
+const WORDPRESS_SCHEDULE_URL = 'https://yohitradio.com/wp-json/wp/v2/calendrier?per_page=100&_embed';
+
+// Helper to resolve image sources
+function resolveImageSource(source: string | number | ImageSourcePropType | undefined): ImageSourcePropType {
+  if (!source) return { uri: '' };
+  if (typeof source === 'string') return { uri: source };
+  return source as ImageSourcePropType;
+}
 
 interface WordPressScheduleItem {
   id: number;
@@ -35,433 +45,815 @@ interface WordPressScheduleItem {
 
 interface Show {
   id: number;
-  day: string;
+  day: string; // lowercase day name (e.g., "monday")
   title: string;
-  startTime: string;
-  endTime: string;
+  startTime: string; // "HH:mm"
+  endTime: string; // "HH:mm"
   timeRange: string;
   imageUrl: string | null;
   sortOrder: number;
 }
 
 interface DaySchedule {
-  day: string;
+  day: string; // Capitalized day name (e.g., "Monday")
   shows: Show[];
 }
 
 interface LiveShowInfo {
   onAirShowId: number | null;
   upNextShowId: number | null;
-  upNextDay: string | null;
+  upNextDay: string | null; // lowercase day name
 }
 
-type ScheduleItem = { type: 'day'; day: string } | { type: 'show'; show: Show };
-
-const WORDPRESS_SCHEDULE_URL = 'https://yohitradio.com/wp-json/wp/v2/schedule?_embed&per_page=100';
-
+// Day order for grouping
 const DAY_ORDER = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: colors.background,
-  },
-  loadingText: {
-    marginTop: 10,
-    fontSize: 16,
-    color: colors.textSecondary,
-  },
-  dayHeader: {
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-    backgroundColor: colors.cardBackground,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  dayHeaderText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: colors.text,
-  },
-  showCard: {
-    marginHorizontal: 20,
-    marginVertical: 8,
-    borderRadius: 15,
-    overflow: 'hidden',
-    backgroundColor: colors.cardBackground,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-  showCardOnAir: {
-    borderWidth: 2,
-    borderColor: colors.accent,
-  },
-  showCardUpNext: {
-    borderWidth: 2,
-    borderColor: colors.textSecondary,
-  },
-  showContent: {
-    flexDirection: 'row',
-    padding: 15,
-  },
-  showImage: {
-    width: 80,
-    height: 80,
-    borderRadius: 12,
-    marginRight: 15,
-    backgroundColor: colors.cardBackground,
-  },
-  showInfo: {
-    flex: 1,
-    justifyContent: 'center',
-  },
-  showTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: colors.text,
-    marginBottom: 4,
-  },
-  showTime: {
-    fontSize: 14,
-    color: colors.textSecondary,
-  },
-  liveIndicator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.accent,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    alignSelf: 'flex-start',
-    marginTop: 6,
-  },
-  liveIndicatorDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#fff',
-    marginRight: 4,
-  },
-  liveIndicatorText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  upNextIndicator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.textSecondary,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    alignSelf: 'flex-start',
-    marginTop: 6,
-  },
-  upNextIndicatorText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  emptyText: {
-    fontSize: 16,
-    color: colors.textSecondary,
-    textAlign: 'center',
-  },
-  footerContainer: {
-    paddingVertical: 20,
-  },
-});
-
-function resolveImageSource(source: string | number | ImageSourcePropType | undefined): ImageSourcePropType {
-  if (!source) return { uri: '' };
-  if (typeof source === 'string') return { uri: source };
-  return source as ImageSourcePropType;
-}
+// FlatList item types
+type ScheduleItem = 
+  | { type: 'header'; day: string; isToday: boolean }
+  | { type: 'show'; show: Show; dayLowercase: string; isOnAir: boolean; isUpNext: boolean };
 
 export default function ShowsScreen() {
-  const flatListRef = useRef<FlatList>(null);
-
   const [schedule, setSchedule] = useState<DaySchedule[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [currentLiveInfo, setCurrentLiveInfo] = useState<LiveShowInfo>({
     onAirShowId: null,
     upNextShowId: null,
     upNextDay: null,
   });
+  const [currentDayName, setCurrentDayName] = useState<string>('');
   const [hasScrolledToLive, setHasScrolledToLive] = useState(false);
+  
+  const flatListRef = useRef<FlatList>(null);
 
   const fetchSchedule = useCallback(async () => {
+    console.log('Fetching schedule from WordPress...');
     try {
       const response = await fetch(WORDPRESS_SCHEDULE_URL);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
       const data: WordPressScheduleItem[] = await response.json();
+      console.log(`Fetched ${data.length} schedule items from WordPress`);
 
-      const parsedShows: Show[] = data
-        .map((item) => ({
-          id: item.id,
-          day: item.acf?.day || '',
-          title: decodeHtmlEntities(item.acf?.show_title || item.title.rendered),
-          startTime: item.acf?.start_time || '',
-          endTime: item.acf?.end_time || '',
-          timeRange: `${item.acf?.start_time || ''} - ${item.acf?.end_time || ''}`,
-          imageUrl: item._embedded?.['wp:featuredmedia']?.[0]?.source_url || null,
-          sortOrder: item.acf?.sort_order || 0,
-        }))
-        .filter((show) => show.day && show.startTime && show.endTime);
+      // Parse and transform data
+      const shows: Show[] = data.map((item) => {
+        const acf = item.acf || {};
+        const showTitle = acf.show_title || item.title.rendered || 'Untitled Show';
+        const decodedTitle = decodeHtmlEntities(showTitle);
+        const startTime = acf.start_time || '00:00';
+        const endTime = acf.end_time || '00:00';
+        const timeRange = `${startTime} - ${endTime}`;
+        const sortOrder = acf.sort_order !== undefined ? acf.sort_order : 9999;
+        const dayRaw = acf.day || 'unknown';
+        const dayLowercase = dayRaw.toLowerCase().trim();
 
-      const groupedByDay: { [key: string]: Show[] } = {};
-      parsedShows.forEach((show) => {
-        if (!groupedByDay[show.day]) {
-          groupedByDay[show.day] = [];
+        // Extract featured image
+        let imageUrl: string | null = null;
+        if (item._embedded?.['wp:featuredmedia']?.[0]?.source_url) {
+          imageUrl = item._embedded['wp:featuredmedia'][0].source_url;
         }
-        groupedByDay[show.day].push(show);
+
+        return {
+          id: item.id,
+          day: dayLowercase,
+          title: decodedTitle,
+          startTime,
+          endTime,
+          timeRange,
+          imageUrl,
+          sortOrder,
+        };
       });
 
-      const sortedSchedule: DaySchedule[] = DAY_ORDER.map((day) => ({
-        day,
-        shows: (groupedByDay[day] || []).sort((a, b) => a.sortOrder - b.sortOrder),
-      })).filter((daySchedule) => daySchedule.shows.length > 0);
+      // Group by day
+      const grouped: { [key: string]: Show[] } = {};
+      shows.forEach((show) => {
+        const dayCapitalized = capitalizeDay(show.day);
+        if (!grouped[dayCapitalized]) {
+          grouped[dayCapitalized] = [];
+        }
+        grouped[dayCapitalized].push(show);
+      });
 
-      setSchedule(sortedSchedule);
-    } catch (error) {
-      console.error('Failed to fetch schedule:', error);
+      // Sort shows within each day
+      Object.keys(grouped).forEach((day) => {
+        grouped[day].sort((a, b) => {
+          // Primary: sort_order ascending
+          if (a.sortOrder !== b.sortOrder) {
+            return a.sortOrder - b.sortOrder;
+          }
+          // Fallback: start_time ascending (string compare)
+          return a.startTime.localeCompare(b.startTime);
+        });
+      });
+
+      // Get current day name
+      const now = new Date();
+      const currentDayIndex = now.getDay(); // 0 for Sunday, 1 for Monday, etc.
+      const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      const todayName = daysOfWeek[currentDayIndex];
+      setCurrentDayName(todayName.toLowerCase());
+
+      // Create ordered schedule array starting with current day
+      // Example: If today is Thursday, order is: Thursday, Friday, Saturday, Sunday, Monday, Tuesday, Wednesday
+      const todayIndex = DAY_ORDER.indexOf(todayName);
+      const reorderedDays: string[] = [];
+      
+      for (let i = 0; i < DAY_ORDER.length; i++) {
+        const dayIndex = (todayIndex + i) % DAY_ORDER.length;
+        reorderedDays.push(DAY_ORDER[dayIndex]);
+      }
+
+      const orderedSchedule: DaySchedule[] = reorderedDays
+        .map((day) => ({
+          day,
+          shows: grouped[day] || [],
+        }))
+        .filter((daySchedule) => daySchedule.shows.length > 0);
+
+      console.log('Schedule order:', orderedSchedule.map(ds => ds.day).join(', '));
+      setSchedule(orderedSchedule);
+      setError(null);
+      console.log('Schedule loaded successfully');
+    } catch (err) {
+      console.error('Error fetching schedule:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load schedule';
+      setError(errorMessage);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   }, []);
 
-  const getLiveShowInfo = useCallback((): LiveShowInfo => {
+  // Determine ON AIR NOW and UP NEXT shows with cross-day support and midnight-spanning shows
+  const getLiveShowInfo = useCallback((scheduleData: DaySchedule[]): LiveShowInfo => {
     const now = new Date();
-    const currentDayName = now.toLocaleDateString('en-US', { weekday: 'long' });
-    const currentTime = now.getHours() * 60 + now.getMinutes();
+    const currentDayIndex = now.getDay(); // 0 for Sunday, 1 for Monday, etc.
+    const daysOfWeek = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+    const currentDayName = daysOfWeek[currentDayIndex];
+    const currentTimeMinutes = now.getHours() * 60 + now.getMinutes();
 
-    const todaySchedule = schedule.find((s) => s.day === currentDayName);
-    if (!todaySchedule) {
-      return { onAirShowId: null, upNextShowId: null, upNextDay: null };
-    }
+    console.log(`[LiveShowInfo] Current time: ${now.getHours()}:${now.getMinutes()} (${currentTimeMinutes} minutes), Day: ${currentDayName}`);
 
     let onAirShowId: number | null = null;
     let upNextShowId: number | null = null;
     let upNextDay: string | null = null;
 
-    for (let i = 0; i < todaySchedule.shows.length; i++) {
-      const show = todaySchedule.shows[i];
-      const [startHour, startMin] = show.startTime.split(':').map(Number);
-      const [endHour, endMin] = show.endTime.split(':').map(Number);
-      const startTime = startHour * 60 + startMin;
-      const endTime = endHour * 60 + endMin;
+    // Helper to convert time string to minutes
+    const timeToMinutes = (timeStr: string): number => {
+      const [h, m] = timeStr.split(':').map(Number);
+      return h * 60 + m;
+    };
 
-      if (currentTime >= startTime && currentTime < endTime) {
-        onAirShowId = show.id;
-        if (i + 1 < todaySchedule.shows.length) {
-          upNextShowId = todaySchedule.shows[i + 1].id;
-          upNextDay = currentDayName;
+    // Find current day's schedule
+    const currentDaySchedule = scheduleData.find(
+      (ds) => ds.day.toLowerCase() === currentDayName
+    );
+
+    // Check for shows spanning midnight from previous day
+    const previousDayIndex = (currentDayIndex - 1 + 7) % 7;
+    const previousDayName = daysOfWeek[previousDayIndex];
+    const previousDaySchedule = scheduleData.find(
+      (ds) => ds.day.toLowerCase() === previousDayName
+    );
+
+    // Check if a show from yesterday is still on air (spanning midnight)
+    if (previousDaySchedule) {
+      for (const show of previousDaySchedule.shows) {
+        const showStartMinutes = timeToMinutes(show.startTime);
+        const showEndMinutes = timeToMinutes(show.endTime);
+
+        // Show spans midnight if end time < start time
+        if (showEndMinutes < showStartMinutes) {
+          // This show spans into today
+          // It's on air if current time < end time
+          if (currentTimeMinutes < showEndMinutes) {
+            onAirShowId = show.id;
+            console.log(`[LiveShowInfo] ON AIR NOW (from yesterday): ${show.title} (${show.startTime}-${show.endTime})`);
+            
+            // UP NEXT is the first show of today (if exists)
+            if (currentDaySchedule && currentDaySchedule.shows.length > 0) {
+              upNextShowId = currentDaySchedule.shows[0].id;
+              upNextDay = currentDayName;
+              console.log(`[LiveShowInfo] UP NEXT: ${currentDaySchedule.shows[0].title} (${currentDaySchedule.shows[0].startTime}-${currentDaySchedule.shows[0].endTime})`);
+            }
+            return { onAirShowId, upNextShowId, upNextDay };
+          }
         }
-        break;
-      }
-
-      if (currentTime < startTime && !upNextShowId) {
-        upNextShowId = show.id;
-        upNextDay = currentDayName;
-        break;
       }
     }
 
+    // Check today's shows
+    if (currentDaySchedule) {
+      const shows = currentDaySchedule.shows;
+
+      for (let i = 0; i < shows.length; i++) {
+        const show = shows[i];
+        const showStartMinutes = timeToMinutes(show.startTime);
+        let showEndMinutes = timeToMinutes(show.endTime);
+
+        // Handle shows spanning midnight (e.g., 22:00-02:00)
+        const spansMiddnight = showEndMinutes < showStartMinutes;
+        if (spansMiddnight) {
+          // Add 24 hours to end time for comparison
+          showEndMinutes += 24 * 60;
+        }
+
+        // Check if current time is within [start, end)
+        if (currentTimeMinutes >= showStartMinutes && currentTimeMinutes < showEndMinutes) {
+          onAirShowId = show.id;
+          console.log(`[LiveShowInfo] ON AIR NOW: ${show.title} (${show.startTime}-${show.endTime})`);
+          
+          // UP NEXT is the next show after this one
+          if (i + 1 < shows.length) {
+            upNextShowId = shows[i + 1].id;
+            upNextDay = currentDayName;
+            console.log(`[LiveShowInfo] UP NEXT: ${shows[i + 1].title} (${shows[i + 1].startTime}-${shows[i + 1].endTime})`);
+          } else {
+            // No more shows today, UP NEXT is first show of next day
+            const nextDayIndex = (currentDayIndex + 1) % 7;
+            const nextDayName = daysOfWeek[nextDayIndex];
+            const nextDaySchedule = scheduleData.find(
+              (ds) => ds.day.toLowerCase() === nextDayName
+            );
+            if (nextDaySchedule && nextDaySchedule.shows.length > 0) {
+              upNextShowId = nextDaySchedule.shows[0].id;
+              upNextDay = nextDayName;
+              console.log(`[LiveShowInfo] UP NEXT (tomorrow): ${nextDaySchedule.shows[0].title} (${nextDaySchedule.shows[0].startTime}-${nextDaySchedule.shows[0].endTime})`);
+            }
+          }
+          return { onAirShowId, upNextShowId, upNextDay };
+        }
+      }
+
+      // No show is on air, find UP NEXT
+      for (let i = 0; i < shows.length; i++) {
+        const show = shows[i];
+        const showStartMinutes = timeToMinutes(show.startTime);
+
+        if (currentTimeMinutes < showStartMinutes) {
+          // This is the next show
+          upNextShowId = show.id;
+          upNextDay = currentDayName;
+          console.log(`[LiveShowInfo] UP NEXT (later today): ${show.title} (${show.startTime}-${show.endTime})`);
+          return { onAirShowId, upNextShowId, upNextDay };
+        }
+      }
+    }
+
+    // Current time is after all shows today, UP NEXT is first show of next day
+    let nextDayIndex = (currentDayIndex + 1) % 7;
+    for (let i = 0; i < 7; i++) {
+      const nextDayName = daysOfWeek[nextDayIndex];
+      const nextDaySchedule = scheduleData.find(
+        (ds) => ds.day.toLowerCase() === nextDayName
+      );
+      if (nextDaySchedule && nextDaySchedule.shows.length > 0) {
+        upNextShowId = nextDaySchedule.shows[0].id;
+        upNextDay = nextDayName;
+        console.log(`[LiveShowInfo] UP NEXT (next available day): ${nextDaySchedule.shows[0].title} on ${nextDayName} (${nextDaySchedule.shows[0].startTime}-${nextDaySchedule.shows[0].endTime})`);
+        break;
+      }
+      nextDayIndex = (nextDayIndex + 1) % 7;
+    }
+
     return { onAirShowId, upNextShowId, upNextDay };
-  }, [schedule]);
+  }, []);
 
+  // Auto-scroll to ON AIR NOW or UP NEXT show
   const scrollToLiveShow = useCallback(() => {
-    if (hasScrolledToLive || !flatListRef.current || schedule.length === 0) return;
+    if (!flatListRef.current || schedule.length === 0) {
+      return;
+    }
 
-    const liveInfo = getLiveShowInfo();
-    if (!liveInfo.onAirShowId && !liveInfo.upNextShowId) return;
+    const targetShowId = currentLiveInfo.onAirShowId || currentLiveInfo.upNextShowId;
+    if (!targetShowId) {
+      console.log('[AutoScroll] No live or upcoming show to scroll to');
+      return;
+    }
 
-    const targetShowId = liveInfo.onAirShowId || liveInfo.upNextShowId;
-    const flatData: ScheduleItem[] = [];
+    // Build flat list of items to find the index
+    const flatItems: ScheduleItem[] = [];
     schedule.forEach((daySchedule) => {
-      flatData.push({ type: 'day', day: daySchedule.day });
+      const isToday = daySchedule.day.toLowerCase() === currentDayName;
+      flatItems.push({ type: 'header', day: daySchedule.day, isToday });
+      
       daySchedule.shows.forEach((show) => {
-        flatData.push({ type: 'show', show });
+        const dayLowercase = daySchedule.day.toLowerCase();
+        const isOnAir = show.id === currentLiveInfo.onAirShowId;
+        const isUpNext = show.id === currentLiveInfo.upNextShowId && 
+                         dayLowercase === currentLiveInfo.upNextDay;
+        flatItems.push({ type: 'show', show, dayLowercase, isOnAir, isUpNext });
       });
     });
 
-    const targetIndex = flatData.findIndex(
+    // Find the index of the target show
+    const targetIndex = flatItems.findIndex(
       (item) => item.type === 'show' && item.show.id === targetShowId
     );
 
     if (targetIndex !== -1) {
+      console.log(`[AutoScroll] Scrolling to index ${targetIndex} (show ID: ${targetShowId})`);
+      
+      // Delay scroll to ensure FlatList is fully rendered
       setTimeout(() => {
-        flatListRef.current?.scrollToIndex({
-          index: targetIndex,
-          animated: true,
-          viewPosition: 0.2,
-        });
-        setHasScrolledToLive(true);
-      }, 500);
+        try {
+          flatListRef.current?.scrollToIndex({
+            index: targetIndex,
+            animated: true,
+            viewPosition: 0.1, // Position near the top (10% from top)
+          });
+          setHasScrolledToLive(true);
+        } catch (err) {
+          console.error('[AutoScroll] Error scrolling to index:', err);
+          // Fallback: scroll to offset
+          flatListRef.current?.scrollToOffset({
+            offset: targetIndex * 100, // Approximate offset
+            animated: true,
+          });
+        }
+      }, 300);
+    } else {
+      console.log('[AutoScroll] Target show not found in flat list');
     }
-  }, [schedule, hasScrolledToLive, getLiveShowInfo]);
+  }, [schedule, currentLiveInfo, currentDayName]);
 
+  // Update live info periodically (every 30 seconds) and check for day change
   useEffect(() => {
-    scrollToLiveShow();
+    if (schedule.length > 0) {
+      const updateLiveInfo = () => {
+        const now = new Date();
+        const currentDayIndex = now.getDay();
+        const daysOfWeek = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+        const todayName = daysOfWeek[currentDayIndex];
+
+        // Check if day has changed (midnight transition)
+        if (todayName !== currentDayName) {
+          console.log('Day changed from', currentDayName, 'to', todayName, '- refreshing schedule order');
+          setCurrentDayName(todayName);
+          setHasScrolledToLive(false); // Reset scroll flag on day change
+          fetchSchedule(); // Refresh schedule to reorder days
+        } else {
+          // Update live show info
+          const liveInfo = getLiveShowInfo(schedule);
+          setCurrentLiveInfo(liveInfo);
+        }
+      };
+
+      updateLiveInfo(); // Initial update
+      const interval = setInterval(updateLiveInfo, 30 * 1000); // Update every 30 seconds
+
+      return () => clearInterval(interval);
+    }
+  }, [schedule, getLiveShowInfo, currentDayName, fetchSchedule]);
+
+  // Auto-scroll when live info is available and we haven't scrolled yet
+  useEffect(() => {
+    if (schedule.length > 0 && !hasScrolledToLive && (currentLiveInfo.onAirShowId || currentLiveInfo.upNextShowId)) {
+      console.log('[AutoScroll] Triggering auto-scroll to live/upcoming show');
+      scrollToLiveShow();
+    }
   }, [schedule, currentLiveInfo, hasScrolledToLive, scrollToLiveShow]);
 
+  useEffect(() => {
+    fetchSchedule();
+  }, [fetchSchedule]);
+
   const onRefresh = useCallback(() => {
+    console.log('User initiated refresh');
     setRefreshing(true);
-    setHasScrolledToLive(false);
+    setHasScrolledToLive(false); // Reset scroll flag on manual refresh
     fetchSchedule();
   }, [fetchSchedule]);
 
-  useEffect(() => {
-    fetchSchedule();
-  }, [fetchSchedule]);
-
-  useEffect(() => {
-    const updateLiveInfo = () => {
-      setCurrentLiveInfo(getLiveShowInfo());
-    };
-
-    updateLiveInfo();
-    const interval = setInterval(updateLiveInfo, 60000);
-
-    return () => clearInterval(interval);
-  }, [schedule, getLiveShowInfo]);
-
-  const currentDayName = new Date().toLocaleDateString('en-US', { weekday: 'long' });
-
-  function capitalizeDay(day: string): string {
+  // Capitalize day name
+  const capitalizeDay = (day: string): string => {
+    const normalized = day.toLowerCase().trim();
     const dayMap: { [key: string]: string } = {
-      Monday: 'Lundi',
-      Tuesday: 'Mardi',
-      Wednesday: 'Mercredi',
-      Thursday: 'Jeudi',
-      Friday: 'Vendredi',
-      Saturday: 'Samedi',
-      Sunday: 'Dimanche',
+      monday: 'Monday',
+      tuesday: 'Tuesday',
+      wednesday: 'Wednesday',
+      thursday: 'Thursday',
+      friday: 'Friday',
+      saturday: 'Saturday',
+      sunday: 'Sunday',
     };
-    return dayMap[day] || day;
-  }
+    return dayMap[normalized] || day;
+  };
 
-  const flatData: ScheduleItem[] = [];
+  // Prepare flat list data
+  const flatListData: ScheduleItem[] = [];
   schedule.forEach((daySchedule) => {
-    flatData.push({ type: 'day', day: daySchedule.day });
+    const isToday = daySchedule.day.toLowerCase() === currentDayName;
+    flatListData.push({ type: 'header', day: daySchedule.day, isToday });
+    
     daySchedule.shows.forEach((show) => {
-      flatData.push({ type: 'show', show });
+      const dayLowercase = daySchedule.day.toLowerCase();
+      const isOnAir = show.id === currentLiveInfo.onAirShowId;
+      const isUpNext = show.id === currentLiveInfo.upNextShowId && 
+                       dayLowercase === currentLiveInfo.upNextDay;
+      flatListData.push({ type: 'show', show, dayLowercase, isOnAir, isUpNext });
     });
   });
 
-  function renderItem({ item }: { item: ScheduleItem }) {
-    if (item.type === 'day') {
+  const renderItem = ({ item }: { item: ScheduleItem }) => {
+    if (item.type === 'header') {
       return (
         <View style={styles.dayHeader}>
-          <Text style={styles.dayHeaderText}>{capitalizeDay(item.day)}</Text>
+          <Text style={styles.dayTitle}>{item.day}</Text>
+          {item.isToday && (
+            <View style={styles.todayBadge}>
+              <Text style={styles.todayBadgeText}>TODAY</Text>
+            </View>
+          )}
         </View>
       );
-    }
-
-    const show = item.show;
-    const isOnAir = currentLiveInfo.onAirShowId === show.id;
-    const isUpNext = currentLiveInfo.upNextShowId === show.id;
-
-    return (
-      <View
-        style={[
-          styles.showCard,
-          isOnAir && styles.showCardOnAir,
-          isUpNext && styles.showCardUpNext,
-        ]}
-      >
-        <View style={styles.showContent}>
-          {show.imageUrl && (
-            <Image
-              source={resolveImageSource(show.imageUrl)}
-              style={styles.showImage}
-            />
-          )}
-          <View style={styles.showInfo}>
-            <Text style={styles.showTitle}>{show.title}</Text>
-            <Text style={styles.showTime}>{show.timeRange}</Text>
-            {isOnAir && (
-              <View style={styles.liveIndicator}>
-                <View style={styles.liveIndicatorDot} />
-                <Text style={styles.liveIndicatorText}>EN DIRECT</Text>
-              </View>
-            )}
-            {isUpNext && !isOnAir && (
-              <View style={styles.upNextIndicator}>
-                <Text style={styles.upNextIndicatorText}>À SUIVRE</Text>
+    } else {
+      const { show, isOnAir, isUpNext } = item;
+      
+      return (
+        <View
+          style={[
+            styles.showCard,
+            isOnAir && styles.showCardOnAir,
+            isUpNext && !isOnAir && styles.showCardUpNext,
+          ]}
+        >
+          <View style={styles.showImageContainer}>
+            {show.imageUrl ? (
+              <Image
+                source={resolveImageSource(show.imageUrl)}
+                style={styles.showImage}
+                resizeMode="cover"
+              />
+            ) : (
+              <View style={styles.showImagePlaceholder}>
+                <IconSymbol
+                  ios_icon_name="music.note"
+                  android_material_icon_name="music-note"
+                  size={24}
+                  color="#FFD700"
+                />
               </View>
             )}
           </View>
+
+          <View style={styles.showInfo}>
+            <View style={styles.showTitleRow}>
+              <Text style={styles.showTitle} numberOfLines={2}>
+                {show.title}
+              </Text>
+              {isOnAir && (
+                <View style={styles.badgeOnAir}>
+                  <Text style={styles.badgeText}>ON AIR NOW</Text>
+                </View>
+              )}
+              {isUpNext && !isOnAir && (
+                <View style={styles.badgeUpNext}>
+                  <Text style={styles.badgeText}>UP NEXT</Text>
+                </View>
+              )}
+            </View>
+            <View style={styles.timeRow}>
+              <IconSymbol
+                ios_icon_name="clock"
+                android_material_icon_name="access-time"
+                size={14}
+                color="#B8B8B8"
+              />
+              <Text style={styles.timeText}>{show.timeRange}</Text>
+            </View>
+          </View>
         </View>
-      </View>
-    );
-  }
+      );
+    }
+  };
 
-  function renderHeader() {
-    return null;
-  }
+  const renderHeader = () => (
+    <View style={styles.header}>
+      <IconSymbol
+        ios_icon_name="calendar"
+        android_material_icon_name="calendar-today"
+        size={32}
+        color="#FFD700"
+      />
+      <Text style={styles.title}>Programming Schedule</Text>
+    </View>
+  );
 
-  function renderEmpty() {
-    if (loading) return null;
-    return (
-      <View style={styles.emptyContainer}>
-        <Text style={styles.emptyText}>Aucune émission disponible</Text>
-      </View>
-    );
-  }
+  const renderEmpty = () => (
+    <View style={styles.emptyContainer}>
+      <IconSymbol
+        ios_icon_name="calendar"
+        android_material_icon_name="calendar-today"
+        size={48}
+        color="#B8B8B8"
+      />
+      <Text style={styles.emptyText}>No shows scheduled</Text>
+    </View>
+  );
 
-  function renderFooter() {
-    return <View style={styles.footerContainer} />;
-  }
+  const renderFooter = () => <View style={styles.footer} />;
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={colors.accent} />
-        <Text style={styles.loadingText}>Chargement de la grille...</Text>
-      </View>
+      <SafeAreaView style={styles.safeArea} edges={['top']}>
+        <LinearGradient
+          colors={['#1a0033', '#2d1b4e', '#1a0033']}
+          style={styles.gradient}
+        >
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#FFD700" />
+            <Text style={styles.loadingText}>Loading schedule...</Text>
+          </View>
+        </LinearGradient>
+      </SafeAreaView>
+    );
+  }
+
+  if (error) {
+    return (
+      <SafeAreaView style={styles.safeArea} edges={['top']}>
+        <LinearGradient
+          colors={['#1a0033', '#2d1b4e', '#1a0033']}
+          style={styles.gradient}
+        >
+          <FlatList
+            data={[]}
+            renderItem={() => null}
+            ListHeaderComponent={
+              <View style={styles.errorContainer}>
+                <IconSymbol
+                  ios_icon_name="exclamationmark.triangle"
+                  android_material_icon_name="error"
+                  size={48}
+                  color="#FFD700"
+                />
+                <Text style={styles.errorTitle}>Unable to Load Schedule</Text>
+                <Text style={styles.errorMessage}>{error}</Text>
+                <Text style={styles.errorHint}>Pull down to retry</Text>
+              </View>
+            }
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                tintColor="#FFD700"
+                colors={['#FFD700']}
+              />
+            }
+            contentContainerStyle={styles.contentContainer}
+          />
+        </LinearGradient>
+      </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <FlatList
-        ref={flatListRef}
-        data={flatData}
-        renderItem={renderItem}
-        keyExtractor={(item, index) =>
-          item.type === 'day' ? `day-${item.day}` : `show-${item.show.id}`
-        }
-        ListHeaderComponent={renderHeader}
-        ListEmptyComponent={renderEmpty}
-        ListFooterComponent={renderFooter}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor={colors.accent}
-          />
-        }
-        onScrollToIndexFailed={(info) => {
-          console.log('Scroll to index failed:', info);
-        }}
-      />
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
+      <LinearGradient
+        colors={['#1a0033', '#2d1b4e', '#1a0033']}
+        style={styles.gradient}
+      >
+        <FlatList
+          ref={flatListRef}
+          data={flatListData}
+          renderItem={renderItem}
+          keyExtractor={(item, index) => 
+            item.type === 'header' ? `header-${item.day}` : `show-${item.show.id}-${index}`
+          }
+          ListHeaderComponent={renderHeader}
+          ListEmptyComponent={renderEmpty}
+          ListFooterComponent={renderFooter}
+          contentContainerStyle={styles.contentContainer}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor="#FFD700"
+              colors={['#FFD700']}
+            />
+          }
+          onScrollToIndexFailed={(info) => {
+            console.warn('[AutoScroll] scrollToIndex failed:', info);
+            // Fallback: scroll to offset
+            setTimeout(() => {
+              flatListRef.current?.scrollToOffset({
+                offset: info.averageItemLength * info.index,
+                animated: true,
+              });
+            }, 100);
+          }}
+        />
+      </LinearGradient>
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#1a0033',
+  },
+  gradient: {
+    flex: 1,
+  },
+  contentContainer: {
+    padding: 20,
+    paddingBottom: 100,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 24,
+    gap: 12,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+  },
+  dayHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 16,
+    marginBottom: 14,
+    paddingBottom: 10,
+    borderBottomWidth: 2,
+    borderBottomColor: '#FFD700',
+    gap: 10,
+  },
+  dayTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#FFD700',
+  },
+  todayBadge: {
+    backgroundColor: '#FFD700',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  todayBadgeText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#1a0033',
+    letterSpacing: 0.5,
+  },
+  showCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 12,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 215, 0, 0.2)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  showCardOnAir: {
+    borderWidth: 2,
+    borderColor: '#FFD700',
+    backgroundColor: 'rgba(255, 215, 0, 0.15)',
+    shadowColor: '#FFD700',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.5,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  showCardUpNext: {
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 215, 0, 0.6)',
+    backgroundColor: 'rgba(255, 215, 0, 0.1)',
+  },
+  showImageContainer: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.15,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  showImage: {
+    width: '100%',
+    height: '100%',
+  },
+  showImagePlaceholder: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 215, 0, 0.1)',
+  },
+  showInfo: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  showTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 6,
+    gap: 8,
+  },
+  showTitle: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  badgeOnAir: {
+    backgroundColor: '#FFD700',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    alignSelf: 'flex-start',
+  },
+  badgeUpNext: {
+    backgroundColor: 'rgba(255, 215, 0, 0.7)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    alignSelf: 'flex-start',
+  },
+  badgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#1a0033',
+    letterSpacing: 0.5,
+  },
+  timeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  timeText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#B8B8B8',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 16,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#B8B8B8',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 40,
+    gap: 16,
+    minHeight: 400,
+  },
+  errorTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    textAlign: 'center',
+  },
+  errorMessage: {
+    fontSize: 14,
+    color: '#B8B8B8',
+    textAlign: 'center',
+  },
+  errorHint: {
+    fontSize: 12,
+    color: '#FFD700',
+    textAlign: 'center',
+    marginTop: 8,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 60,
+    gap: 16,
+  },
+  emptyText: {
+    fontSize: 16,
+    color: '#B8B8B8',
+    textAlign: 'center',
+  },
+  footer: {
+    height: 20,
+  },
+});

@@ -5,11 +5,9 @@
     "slug": "Yo Hit Radio",
     "version": "1.0.2",
     "orientation": "portrait",
-    "icon": "./assets/images/logo 192 (1).png",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/splash.png",
       "resizeMode": "contain",
       "backgroundColor": "#4B1E78"
     },
@@ -27,7 +25,6 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/logo 192 (1).png",
         "backgroundColor": "#4B1E78"
       },
       "edgeToEdgeEnabled": true,
@@ -53,7 +50,6 @@
       ]
     },
     "web": {
-      "favicon": "./assets/images/final_quest_240x240.png",
       "bundler": "metro"
     },
     "plugins": [
@@ -73,7 +69,7 @@
     },
     "extra": {
       "router": {},
-      "backendUrl": "https://ggjfh5vjvuut7kh3tnnefceazjf2q6jg.app.specular.dev",
+      "backendUrl": "https://prod-proj-mttbudqdquje8djf3qn74-liwg5h36mq-ey.a.run.app",
       "oneSignalAppId": "41c0200e-69a3-4e4d-bc0d-0a53d0f6e65a"
     }
   }
