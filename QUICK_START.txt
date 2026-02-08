@@ -1,0 +1,64 @@
+
+╔══════════════════════════════════════════════════════════════╗
+║                                                              ║
+║     🎨 YO HIT RADIO - SPLASH SCREEN QUICK START             ║
+║                                                              ║
+╚══════════════════════════════════════════════════════════════╝
+
+✅ BACKEND IS READY! The splash screen endpoint is live.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📥 STEP 1: DOWNLOAD SPLASH SCREEN
+
+Run this command:
+    npm run download-splash
+
+Or download manually:
+    https://ggjfh5vjvuut7kh3tnnefceazjf2q6jg.app.specular.dev/api/generate-splash
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ STEP 2: VERIFY IMAGE
+
+Check that assets/splash.png has:
+    • Size: 2048x2048 pixels
+    • Purple background (#4B1E78)
+    • Yo Hit Radio logo centered
+    • "La radio des hits" text in gold
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🏗️ STEP 3: REBUILD ANDROID APK
+
+Run these commands:
+    rm -rf android/
+    expo prebuild -p android --clean
+    eas build -p android --profile preview
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📱 STEP 4: TEST
+
+Install the new APK and open the app to see your splash screen!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📚 NEED HELP?
+
+See these files for more details:
+    • SPLASH_SCREEN_READY.md - Quick guide
+    • README_SPLASH_SETUP.md - Complete guide
+    • SPLASH_SCREEN_INSTRUCTIONS.md - Detailed steps
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🎯 ONE-LINER:
+
+npm run download-splash && expo prebuild -p android --clean && eas build -p android
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✨ That's it! Your splash screen is ready to go!
+
+╚══════════════════════════════════════════════════════════════╝
