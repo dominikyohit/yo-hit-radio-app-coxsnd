@@ -1,4 +1,5 @@
 
+/* eslint-disable no-undef */
 /**
  * Script to download the generated splash screen from the backend
  * Run this with: node scripts/download-splash.js

@@ -446,19 +446,26 @@ export default function HomeScreen() {
   const [previewReleases, setPreviewReleases] = useState<PreviewRelease[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const initializeApp = async () => {
-      await fetchSchedule();
-      await fetchPreviewData();
-      setLoading(false);
-    };
+  const fetchSchedule = useCallback(async () => {
+    try {
+      const response = await fetchWithTimeout(WORDPRESS_SCHEDULE_URL, { timeout: 10000 });
+      const data: WordPressScheduleItem[] = await response.json();
 
-    initializeApp();
+      const parsedSchedule: Schedule = data
+        .map((item) => ({
+          id: item.id,
+          name: item.acf?.day || '',
+          startTime: item.acf?.start_time || '',
+          endTime: item.acf?.end_time || '',
+          imageUrl: item._embedded?.['wp:featuredmedia']?.[0]?.source_url || null,
+        }))
+        .filter((show) => show.name && show.startTime && show.endTime);
+
+      setSchedule(parsedSchedule);
+    } catch (error) {
+      console.log('Failed to fetch schedule:', error);
+    }
   }, []);
-
-  useEffect(() => {
-    updateShows();
-  }, [schedule]);
 
   const updateShows = useCallback(() => {
     if (schedule.length > 0) {
@@ -469,8 +476,18 @@ export default function HomeScreen() {
   }, [schedule]);
 
   useEffect(() => {
-    fetchPreviewData();
-  }, []);
+    const initializeApp = async () => {
+      await fetchSchedule();
+      await fetchPreviewData();
+      setLoading(false);
+    };
+
+    initializeApp();
+  }, [fetchSchedule]);
+
+  useEffect(() => {
+    updateShows();
+  }, [schedule, updateShows]);
 
   const rotation = useSharedValue(0);
 
@@ -522,27 +539,6 @@ export default function HomeScreen() {
       transform: [{ rotate: `${rotation.value}deg` }],
     };
   });
-
-  const fetchSchedule = useCallback(async () => {
-    try {
-      const response = await fetchWithTimeout(WORDPRESS_SCHEDULE_URL, { timeout: 10000 });
-      const data: WordPressScheduleItem[] = await response.json();
-
-      const parsedSchedule: Schedule = data
-        .map((item) => ({
-          id: item.id,
-          name: item.acf?.day || '',
-          startTime: item.acf?.start_time || '',
-          endTime: item.acf?.end_time || '',
-          imageUrl: item._embedded?.['wp:featuredmedia']?.[0]?.source_url || null,
-        }))
-        .filter((show) => show.name && show.startTime && show.endTime);
-
-      setSchedule(parsedSchedule);
-    } catch (error) {
-      console.log('Failed to fetch schedule:', error);
-    }
-  }, []);
 
   async function checkAndShowBackgroundInfoPopup() {
     // Removed background info popup logic
