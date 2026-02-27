@@ -37,9 +37,9 @@ interface WordPressScheduleItem {
     sort_order?: number;
   };
   _embedded?: {
-    'wp:featuredmedia'?: {
+    'wp:featuredmedia'?: Array<{
       source_url?: string;
-    }[];
+    }>;
   };
 }
 
