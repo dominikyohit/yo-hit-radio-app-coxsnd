@@ -12,7 +12,6 @@ import { useNetworkState } from "expo-network";
 import { useColorScheme, Alert } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
-import { SystemBars } from "react-native-edge-to-edge";
 import * as SplashScreen from "expo-splash-screen";
 import { Stack, router } from "expo-router";
 import { useFonts } from "expo-font";
@@ -98,7 +97,6 @@ export default function RootLayout() {
               />
             </Stack>
             <StatusBar style="light" />
-            <SystemBars style="light" />
           </WidgetProvider>
         </AuthProvider>
       </ThemeProvider>
