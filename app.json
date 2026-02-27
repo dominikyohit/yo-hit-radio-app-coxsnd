@@ -1,17 +1,14 @@
-
 {
   "expo": {
     "name": "Yo Hit Radio",
-    "slug": "Yo Hit Radio",
+    "slug": "yo-hit-radio-app-coxsnd",
     "version": "1.0.2",
     "orientation": "portrait",
-    "icon": "./assets/images/logo 192 (1).png",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/images/logo 192 (1).png",
       "resizeMode": "contain",
-      "backgroundColor": "#000000"
+      "backgroundColor": "#4B1E78"
     },
     "ios": {
       "supportsTablet": true,
@@ -27,20 +24,19 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/logo 192 (1).png",
-        "backgroundColor": "#000000"
+        "backgroundColor": "#4B1E78"
       },
-      "edgeToEdgeEnabled": true,
       "package": "com.yohitradio.app",
       "googleServicesFile": "./google-services.json",
       "versionCode": 3,
       "permissions": [
-        "POST_NOTIFICATIONS",
+        "INTERNET",
+        "MODIFY_AUDIO_SETTINGS",
+        "VIBRATE",
         "FOREGROUND_SERVICE",
         "FOREGROUND_SERVICE_MEDIA_PLAYBACK",
-        "WAKE_LOCK",
-        "MODIFY_AUDIO_SETTINGS",
-        "INTERNET"
+        "POST_NOTIFICATIONS",
+        "WAKE_LOCK"
       ],
       "blockedPermissions": [
         "CAMERA",
@@ -52,7 +48,6 @@
       ]
     },
     "web": {
-      "favicon": "./assets/images/final_quest_240x240.png",
       "bundler": "metro"
     },
     "plugins": [
@@ -66,13 +61,13 @@
         }
       ]
     ],
-    "scheme": "Yo Hit Radio",
+    "scheme": "yo-hit-radio",
     "experiments": {
       "typedRoutes": true
     },
     "extra": {
       "router": {},
-      "backendUrl": "https://prod-proj-mttbudqdquje8djf3qn74-liwg5h36mq-ey.a.run.app",
+      "backendUrl": "https://ggjfh5vjvuut7kh3tnnefceazjf2q6jg.app.specular.dev",
       "oneSignalAppId": "41c0200e-69a3-4e4d-bc0d-0a53d0f6e65a"
     }
   }
