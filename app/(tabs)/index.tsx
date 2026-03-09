@@ -11,6 +11,7 @@ import Animated, {
 import { parseEventDate, formatDateBadge } from '@/utils/dateHelpers';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AudioManager from '@/utils/audioManager';
+import TrackPlayer, { State, Event } from 'react-native-track-player';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { IconSymbol } from '@/components/IconSymbol';
 import { decodeHtmlEntities } from '@/utils/htmlDecoder';
@@ -138,7 +139,7 @@ interface WordPressScheduleItem {
   };
 }
 
-const STREAM_URL = 'https://a13.asurahosting.com/listen/yo_hit_radio/radio.mp3';
+const STREAM_URL = 'https://stream.zeno.fm/hmc38shnrwzuv';
 const METADATA_POLL_INTERVAL = 12000; // 12 seconds - polls AzuraCast API every 12 seconds
 const AZURACAST_API_URL = 'https://a13.asurahosting.com/api/nowplaying/yo_hit_radio';
 const WORDPRESS_SCHEDULE_URL = 'https://yohitradio.com/wp-json/wp/v2/calendrier?per_page=100&_embed';
@@ -230,6 +231,37 @@ export default function HomeScreen() {
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ rotate: `${rotation.value}deg` }],
   }));
+
+  // Listen to TrackPlayer state changes
+  useEffect(() => {
+    console.log('[Home] Setting up TrackPlayer state listener');
+    
+    const updatePlaybackState = async () => {
+      try {
+        const state = await TrackPlayer.getState();
+        const playing = state === State.Playing;
+        setIsPlaying(playing);
+        console.log('[Home] Playback state updated:', state, 'isPlaying:', playing);
+      } catch (error) {
+        console.error('[Home] Error getting playback state:', error);
+      }
+    };
+
+    // Initial state check
+    updatePlaybackState();
+
+    // Listen for state changes
+    const subscription = TrackPlayer.addEventListener(Event.PlaybackState, ({ state }) => {
+      const playing = state === State.Playing;
+      setIsPlaying(playing);
+      console.log('[Home] Playback state changed:', state, 'isPlaying:', playing);
+    });
+
+    return () => {
+      console.log('[Home] Removing TrackPlayer state listener');
+      subscription.remove();
+    };
+  }, []);
 
   useEffect(() => {
     if (isPlaying) {
@@ -640,7 +672,6 @@ export default function HomeScreen() {
       if (isPlaying) {
         console.log('[Home] 🛑 User tapped Stop button');
         await audioManager.stopCurrentAudio();
-        setIsPlaying(false);
         
         console.log('[Home] ✅ Audio stopped');
         console.log('[Home] 📝 Metadata remains visible and continues refreshing');
@@ -668,7 +699,6 @@ export default function HomeScreen() {
         
         // Start playback with metadata (including artwork for notification)
         await audioManager.playAudio(STREAM_URL, true, title, artist, artwork);
-        setIsPlaying(true);
         setLoading(false);
         
         console.log('[Home] ✅ Live stream started successfully');
@@ -684,7 +714,7 @@ export default function HomeScreen() {
           console.log('[Home] 🤖 Android: Notification shows:', title, '-', artist);
           console.log('[Home] 🤖 Android: Controls: Play/Pause/Stop');
           console.log('[Home] 🤖 Android: Visible in notification shade + lock screen');
-          console.log('[Home] 🤖 Android: Audio focus acquired (DoNotMix mode)');
+          console.log('[Home] 🤖 Android: Foreground service ACTIVE');
         } else if (Platform.OS === 'ios') {
           console.log('[Home] 🍎 iOS: Lock screen controls NOW ACTIVE');
           console.log('[Home] 🍎 iOS: Now Playing metadata updated');
@@ -694,7 +724,6 @@ export default function HomeScreen() {
     } catch (error) {
       console.error('[Home] ❌ Error toggling playback:', error);
       setLoading(false);
-      setIsPlaying(false);
     }
   };
 

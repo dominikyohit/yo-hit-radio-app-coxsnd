@@ -29,12 +29,14 @@
       },
       "package": "com.yohitradio.app",
       "googleServicesFile": "./google-services.json",
-      "versionCode": 3,
+      "versionCode": 4,
       "permissions": [
         "INTERNET",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_MEDIA_PLAYBACK",
+        "WAKE_LOCK",
         "MODIFY_AUDIO_SETTINGS",
-        "VIBRATE",
-        "WAKE_LOCK"
+        "POST_NOTIFICATIONS"
       ],
       "blockedPermissions": [
         "CAMERA",
@@ -52,6 +54,14 @@
       "expo-font",
       "expo-router",
       "expo-web-browser",
+      [
+        "react-native-track-player",
+        {
+          "android": {
+            "v2": true
+          }
+        }
+      ],
       [
         "onesignal-expo-plugin",
         {
