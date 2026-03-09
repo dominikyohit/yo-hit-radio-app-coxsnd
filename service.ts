@@ -12,7 +12,6 @@
  * from the React Native JS thread, providing true background audio capability.
  */
 
-// eslint-disable-next-line import/no-unresolved
 import TrackPlayer, { Event } from 'react-native-track-player';
 
 /**
@@ -26,7 +25,7 @@ import TrackPlayer, { Event } from 'react-native-track-player';
  * 
  * This function is called by TrackPlayer when the service starts.
  */
-module.exports = async function () {
+module.exports = async function playbackService() {
   console.log('[PlaybackService] 🎵 Background playback service started');
   console.log('[PlaybackService] 📱 Service running in native foreground service');
   console.log('[PlaybackService] ✅ Audio will continue in background');
@@ -69,19 +68,19 @@ module.exports = async function () {
   });
 
   // Playback State Changed - Track when playback state changes
-  TrackPlayer.addEventListener(Event.PlaybackState, async ({ state }) => {
-    console.log('[PlaybackService] 🔄 Playback state changed:', state);
+  TrackPlayer.addEventListener(Event.PlaybackState, async (data) => {
+    console.log('[PlaybackService] 🔄 Playback state changed:', data.state);
   });
 
   // Playback Error - Handle playback errors
-  TrackPlayer.addEventListener(Event.PlaybackError, async ({ error }) => {
-    console.error('[PlaybackService] ❌ Playback error:', error);
+  TrackPlayer.addEventListener(Event.PlaybackError, async (data) => {
+    console.error('[PlaybackService] ❌ Playback error:', data.error);
   });
 
   // Track Changed - When track changes (for playlists)
-  TrackPlayer.addEventListener(Event.PlaybackActiveTrackChanged, async ({ index, track }) => {
-    if (track) {
-      console.log('[PlaybackService] 🎵 Track changed:', track.title, '-', track.artist);
+  TrackPlayer.addEventListener(Event.PlaybackActiveTrackChanged, async (data) => {
+    if (data.track) {
+      console.log('[PlaybackService] 🎵 Track changed:', data.track.title, '-', data.track.artist);
     }
   });
 
