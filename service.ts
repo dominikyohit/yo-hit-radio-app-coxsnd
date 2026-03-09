@@ -24,6 +24,12 @@ import TrackPlayer, { Event } from 'react-native-track-player';
  * - Android Auto / CarPlay
  */
 export async function playbackService() {
+  // Check if TrackPlayer is available
+  if (!TrackPlayer || typeof TrackPlayer.addEventListener !== 'function') {
+    console.warn('[PlaybackService] ⚠️ TrackPlayer is not available. Background playback service cannot start.');
+    return;
+  }
+
   console.log('[PlaybackService] 🎵 Background playback service started');
   console.log('[PlaybackService] 📱 Service running in native foreground service');
   console.log('[PlaybackService] ✅ Audio will continue in background');

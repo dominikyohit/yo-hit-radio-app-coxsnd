@@ -16,6 +16,9 @@ import TrackPlayer, {
 } from 'react-native-track-player';
 import { Platform } from 'react-native';
 
+// Check if TrackPlayer is available (not available in Expo Go or web preview)
+const isTrackPlayerAvailable = TrackPlayer && typeof TrackPlayer.setupPlayer === 'function';
+
 class AudioManager {
   private static instance: AudioManager;
   private isSetup: boolean = false;
@@ -34,6 +37,11 @@ class AudioManager {
    * Setup TrackPlayer with background playback configuration
    */
   public async setupPlayer(): Promise<void> {
+    if (!isTrackPlayerAvailable) {
+      console.warn('[AudioManager] ⚠️ TrackPlayer is not available in this environment. Background audio will not work. Please use a custom development client or built APK/AAB.');
+      return;
+    }
+
     if (this.isSetup) {
       console.log('[AudioManager] ✅ Player already setup');
       return;
@@ -97,6 +105,11 @@ class AudioManager {
     artist: string = 'Live Stream',
     artwork?: string
   ): Promise<void> {
+    if (!isTrackPlayerAvailable) {
+      console.warn('[AudioManager] ⚠️ TrackPlayer is not available. Cannot play audio in this environment.');
+      return;
+    }
+
     try {
       console.log('[AudioManager] 🎵 Starting playback');
       console.log('[AudioManager] 📻 Stream:', uri);
@@ -141,6 +154,11 @@ class AudioManager {
    * Pause current audio
    */
   public async pauseAudio(): Promise<void> {
+    if (!isTrackPlayerAvailable) {
+      console.warn('[AudioManager] ⚠️ TrackPlayer is not available. Cannot pause audio.');
+      return;
+    }
+
     try {
       console.log('[AudioManager] ⏸️ Pausing audio');
       await TrackPlayer.pause();
@@ -154,6 +172,11 @@ class AudioManager {
    * Resume paused audio
    */
   public async resumeAudio(): Promise<void> {
+    if (!isTrackPlayerAvailable) {
+      console.warn('[AudioManager] ⚠️ TrackPlayer is not available. Cannot resume audio.');
+      return;
+    }
+
     try {
       console.log('[AudioManager] ▶️ Resuming audio');
       await TrackPlayer.play();
@@ -167,6 +190,11 @@ class AudioManager {
    * Stop and clear current audio
    */
   public async stopCurrentAudio(): Promise<void> {
+    if (!isTrackPlayerAvailable) {
+      console.warn('[AudioManager] ⚠️ TrackPlayer is not available. Cannot stop audio.');
+      return;
+    }
+
     try {
       console.log('[AudioManager] 🛑 Stopping current audio');
       await TrackPlayer.reset();
@@ -181,6 +209,10 @@ class AudioManager {
    * Check if audio is currently playing
    */
   public async isPlaying(): Promise<boolean> {
+    if (!isTrackPlayerAvailable) {
+      return false;
+    }
+
     try {
       const state = await TrackPlayer.getState();
       return state === State.Playing;
@@ -200,6 +232,11 @@ class AudioManager {
    * Update metadata for currently playing audio
    */
   public async updateMetadata(title: string, artist: string, artwork?: string): Promise<void> {
+    if (!isTrackPlayerAvailable) {
+      console.warn('[AudioManager] ⚠️ TrackPlayer is not available. Cannot update metadata.');
+      return;
+    }
+
     try {
       console.log('[AudioManager] 📝 Updating metadata:', { title, artist });
       
@@ -222,6 +259,11 @@ class AudioManager {
    * Set volume (0.0 to 1.0)
    */
   public async setVolume(volume: number): Promise<void> {
+    if (!isTrackPlayerAvailable) {
+      console.warn('[AudioManager] ⚠️ TrackPlayer is not available. Cannot set volume.');
+      return;
+    }
+
     try {
       await TrackPlayer.setVolume(Math.max(0, Math.min(1, volume)));
     } catch (error) {
