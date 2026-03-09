@@ -1,267 +1,115 @@
-
-/**
- * Audio Manager - react-native-track-player implementation
- * 
- * Provides robust background audio playback for iOS and Android.
- * Requires custom development build (EAS Build) - NOT compatible with Expo Go.
- * 
- * IMPORTANT: This uses react-native-track-player for true background playback
- * with media notifications and lock screen controls.
- */
-
-import TrackPlayer, {
-  AppKilledPlaybackBehavior,
-  Capability,
-  State,
-  Event,
-} from 'react-native-track-player';
-import { Platform } from 'react-native';
-
-const STREAM_URL = 'https://stream.zeno.fm/hmc38shnrwzuv';
+import { Audio } from 'expo-av';
 
 class AudioManager {
-  private static instance: AudioManager;
-  private isSetup: boolean = false;
-  private currentTrackId: string = 'radio-stream';
-  private currentTitle: string = 'Yo Hit Radio';
-  private currentArtist: string = 'Live Stream';
-  private currentArtwork: string | undefined = undefined;
+  private sound: Audio.Sound | null = null;
+  private isPlaying: boolean = false;
+  private streamUrl: string = 'https://stream.zeno.fm/hmc38shnrwzuv';
+  private playbackStatusListeners: ((status: Audio.PlaybackStatus) => void)[] = [];
 
-  private constructor() {}
-
-  public static getInstance(): AudioManager {
-    if (!AudioManager.instance) {
-      AudioManager.instance = new AudioManager();
-    }
-    return AudioManager.instance;
+  constructor() {
+    this.configureAudioMode();
   }
 
-  /**
-   * Setup TrackPlayer with background playback capabilities
-   */
-  public async setupPlayer(): Promise<void> {
-    if (this.isSetup) {
-      console.log('[AudioManager] ✅ TrackPlayer already setup');
-      return;
-    }
-
+  private async configureAudioMode() {
     try {
-      console.log('[AudioManager] 🎵 Setting up TrackPlayer');
-      console.log('[AudioManager] 📱 Platform:', Platform.OS);
-
-      // Setup player
-      await TrackPlayer.setupPlayer({
-        autoHandleInterruptions: true,
-        maxCacheSize: 1024 * 10, // 10MB cache
+      await Audio.setAudioModeAsync({
+        allowsRecording: false,
+        interruptionModeAndroid: Audio.INTERRUPTION_MODE_ANDROID_DO_NOT_MIX,
+        shouldDuckAndroid: false,
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: true, // Crucial for background playback
+        interruptionModeIOS: Audio.INTERRUPTION_MODE_IOS_DO_NOT_MIX,
       });
-
-      // Configure capabilities and options
-      await TrackPlayer.updateOptions({
-        android: {
-          appKilledPlaybackBehavior: AppKilledPlaybackBehavior.ContinuePlayback,
-        },
-        capabilities: [
-          Capability.Play,
-          Capability.Pause,
-          Capability.Stop,
-        ],
-        compactCapabilities: [
-          Capability.Play,
-          Capability.Pause,
-          Capability.Stop,
-        ],
-        progressUpdateEventInterval: 2,
-        alwaysPauseOnInterruption: true,
-        stopWithApp: false, // ✅ Continue playback when app is closed
-      });
-
-      this.isSetup = true;
-
-      console.log('[AudioManager] ✅ TrackPlayer setup complete');
-      console.log('[AudioManager] ✅ Background audio ENABLED');
-      console.log('[AudioManager] ✅ iOS background mode: ACTIVE');
-      console.log('[AudioManager] ✅ Android foreground service: ACTIVE');
     } catch (error) {
-      console.error('[AudioManager] ❌ Error setting up TrackPlayer:', error);
-      throw error;
+      console.error('Error setting audio mode:', error);
     }
   }
 
-  /**
-   * Play audio from URI with metadata
-   */
-  public async playAudio(
-    uri: string = STREAM_URL,
-    isLiveStream: boolean = true,
-    title: string = 'Yo Hit Radio',
-    artist: string = 'Live Stream',
-    artwork?: string
-  ): Promise<void> {
-    try {
-      console.log('[AudioManager] 🎵 Starting playback');
-      console.log('[AudioManager] 📻 Stream:', uri);
-      console.log('[AudioManager] 🎤 Title:', title);
-      console.log('[AudioManager] 👤 Artist:', artist);
-      console.log('[AudioManager] 🖼️ Artwork:', artwork ? 'Yes' : 'No');
-
-      // Ensure player is setup
-      if (!this.isSetup) {
-        await this.setupPlayer();
+  async play() {
+    if (this.sound === null) {
+      try {
+        const { sound } = await Audio.Sound.createAsync(
+          { uri: this.streamUrl },
+          { shouldPlay: true, isLooping: false },
+          this.onPlaybackStatusUpdate
+        );
+        this.sound = sound;
+        this.isPlaying = true;
+      } catch (error) {
+        console.error('Error playing audio:', error);
       }
+    } else {
+      await this.sound.playAsync();
+      this.isPlaying = true;
+    }
+    this.notifyListeners();
+  }
 
-      // Store metadata
-      this.currentTitle = title;
-      this.currentArtist = artist;
-      this.currentArtwork = artwork;
+  async pause() {
+    if (this.sound) {
+      await this.sound.pauseAsync();
+      this.isPlaying = false;
+    }
+    this.notifyListeners();
+  }
 
-      // Reset queue and add track
-      await TrackPlayer.reset();
-      await TrackPlayer.add({
-        id: this.currentTrackId,
-        url: uri,
-        title: title,
-        artist: artist,
-        artwork: artwork,
-        isLiveStream: isLiveStream,
+  async stop() {
+    if (this.sound) {
+      await this.sound.stopAsync();
+      await this.sound.unloadAsync();
+      this.sound = null;
+      this.isPlaying = false;
+    }
+    this.notifyListeners();
+  }
+
+  getIsPlaying(): boolean {
+    return this.isPlaying;
+  }
+
+  private onPlaybackStatusUpdate = (status: Audio.PlaybackStatus) => {
+    if (!status.isLoaded) {
+      if (status.error) {
+        console.error(`Encountered a fatal error during playback: ${status.error}`);
+      }
+    } else {
+      const newIsPlaying = status.isPlaying;
+      if (this.isPlaying !== newIsPlaying) {
+        this.isPlaying = newIsPlaying;
+        this.notifyListeners();
+      }
+    }
+  };
+
+  // Listener pattern to notify components of playback status changes
+  subscribe(listener: (status: Audio.PlaybackStatus) => void) {
+    this.playbackStatusListeners.push(listener);
+    // Immediately notify with current status if available
+    if (this.sound) {
+      this.sound.getStatusAsync().then(status => {
+        if (status.isLoaded) {
+          listener(status);
+        }
       });
-
-      // Start playback
-      await TrackPlayer.play();
-
-      console.log('[AudioManager] ✅ Playback started successfully');
-      console.log('[AudioManager] ✅ Background playback ACTIVE');
-      console.log('[AudioManager] ✅ Media notification VISIBLE');
-      console.log('[AudioManager] ✅ Lock screen controls ACTIVE');
-    } catch (error) {
-      console.error('[AudioManager] ❌ Error playing audio:', error);
-      throw error;
     }
   }
 
-  /**
-   * Pause current audio
-   */
-  public async pauseAudio(): Promise<void> {
-    try {
-      console.log('[AudioManager] ⏸️ Pausing audio');
-      await TrackPlayer.pause();
-      console.log('[AudioManager] ✅ Audio paused');
-    } catch (error) {
-      console.error('[AudioManager] ❌ Error pausing audio:', error);
-    }
+  unsubscribe(listener: (status: Audio.PlaybackStatus) => void) {
+    this.playbackStatusListeners = this.playbackStatusListeners.filter(l => l !== listener);
   }
 
-  /**
-   * Resume paused audio
-   */
-  public async resumeAudio(): Promise<void> {
-    try {
-      console.log('[AudioManager] ▶️ Resuming audio');
-      await TrackPlayer.play();
-      console.log('[AudioManager] ✅ Audio resumed');
-    } catch (error) {
-      console.error('[AudioManager] ❌ Error resuming audio:', error);
-    }
-  }
-
-  /**
-   * Stop and clear current audio
-   */
-  public async stopCurrentAudio(): Promise<void> {
-    try {
-      console.log('[AudioManager] 🛑 Stopping current audio');
-      await TrackPlayer.stop();
-      await TrackPlayer.reset();
-      console.log('[AudioManager] ✅ Audio stopped');
-      console.log('[AudioManager] ✅ Media notification REMOVED');
-    } catch (error) {
-      console.error('[AudioManager] ❌ Error stopping audio:', error);
-    }
-  }
-
-  /**
-   * Check if audio is currently playing
-   */
-  public async isPlaying(): Promise<boolean> {
-    try {
-      const state = await TrackPlayer.getState();
-      return state === State.Playing || state === State.Buffering;
-    } catch {
-      return false;
-    }
-  }
-
-  /**
-   * Get current playback state
-   */
-  public async getPlaybackState(): Promise<State> {
-    try {
-      return await TrackPlayer.getState();
-    } catch (error) {
-      console.error('[AudioManager] ❌ Error getting playback state:', error);
-      return State.None;
-    }
-  }
-
-  /**
-   * Get current URI
-   */
-  public getCurrentUri(): string {
-    return STREAM_URL;
-  }
-
-  /**
-   * Update metadata for currently playing audio
-   */
-  public async updateMetadata(title: string, artist: string, artwork?: string): Promise<void> {
-    console.log('[AudioManager] 📝 Updating metadata:', { title, artist, artwork: artwork ? 'Yes' : 'No' });
-    
-    // Store metadata
-    this.currentTitle = title;
-    this.currentArtist = artist;
-    if (artwork) {
-      this.currentArtwork = artwork;
-    }
-
-    try {
-      // Update the track metadata
-      await TrackPlayer.updateMetadataForTrack(this.currentTrackId, {
-        title: title,
-        artist: artist,
-        artwork: artwork,
+  private notifyListeners() {
+    if (this.sound) {
+      this.sound.getStatusAsync().then(status => {
+        if (status.isLoaded) {
+          this.playbackStatusListeners.forEach(listener => listener(status));
+        }
       });
-
-      console.log('[AudioManager] ✅ Metadata updated successfully');
-      console.log('[AudioManager] ✅ Media notification updated');
-      console.log('[AudioManager] ✅ Lock screen controls updated');
-    } catch (error) {
-      console.error('[AudioManager] ❌ Error updating metadata:', error);
+    } else {
+      // If sound is null, notify listeners that it's not playing
+      this.playbackStatusListeners.forEach(listener => listener({ isPlaying: false, isLoaded: false } as Audio.PlaybackStatus));
     }
-  }
-
-  /**
-   * Set volume (0.0 to 1.0)
-   */
-  public async setVolume(volume: number): Promise<void> {
-    try {
-      const clampedVolume = Math.max(0, Math.min(1, volume));
-      await TrackPlayer.setVolume(clampedVolume);
-      console.log('[AudioManager] 🔊 Volume set to:', clampedVolume);
-    } catch (error) {
-      console.error('[AudioManager] ❌ Error setting volume:', error);
-    }
-  }
-
-  /**
-   * Get current metadata
-   */
-  public getCurrentMetadata(): { title: string; artist: string; artwork?: string } {
-    return {
-      title: this.currentTitle,
-      artist: this.currentArtist,
-      artwork: this.currentArtwork,
-    };
   }
 }
 
-export default AudioManager;
+export const audioManager = new AudioManager();

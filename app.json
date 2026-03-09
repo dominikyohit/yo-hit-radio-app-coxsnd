@@ -1,82 +1,54 @@
-
 {
   "expo": {
     "name": "Yo Hit Radio",
-    "slug": "yo-hit-radio",
-    "version": "1.0.2",
+    "slug": "yohitradio",
+    "version": "1.0.0",
     "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "yohitradio",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": false,
     "splash": {
+      "image": "./assets/images/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#4B1E78"
+      "backgroundColor": "#ffffff"
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.anonymous.Natively",
+      "bundleIdentifier": "com.yohitradio.app",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false,
         "UIBackgroundModes": [
           "audio"
-        ],
-        "NSCameraUsageDescription": false,
-        "NSPhotoLibraryUsageDescription": false
+        ]
       }
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#4B1E78"
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
       },
       "package": "com.yohitradio.app",
-      "googleServicesFile": "./google-services.json",
-      "versionCode": 5,
       "permissions": [
-        "INTERNET",
-        "WAKE_LOCK",
-        "MODIFY_AUDIO_SETTINGS",
-        "POST_NOTIFICATIONS",
-        "FOREGROUND_SERVICE",
-        "FOREGROUND_SERVICE_MEDIA_PLAYBACK"
-      ],
-      "blockedPermissions": [
-        "CAMERA",
-        "RECORD_AUDIO",
-        "READ_EXTERNAL_STORAGE",
-        "WRITE_EXTERNAL_STORAGE",
-        "READ_MEDIA_IMAGES",
-        "READ_MEDIA_VIDEO"
+        "android.permission.INTERNET"
       ]
     },
     "web": {
-      "bundler": "metro"
+      "bundler": "metro",
+      "output": "static",
+      "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
-      "expo-font",
-      "expo-router",
-      "expo-web-browser",
-      [
-        "react-native-track-player",
-        {
-          "android": {
-            "v2": true
-          }
-        }
-      ],
-      [
-        "onesignal-expo-plugin",
-        {
-          "mode": "development"
-        }
-      ]
+      "expo-router"
     ],
-    "scheme": "yohitradio",
     "experiments": {
       "typedRoutes": true
     },
     "extra": {
-      "router": {},
-      "backendUrl": "https://ggjfh5vjvuut7kh3tnnefceazjf2q6jg.app.specular.dev",
-      "oneSignalAppId": "41c0200e-69a3-4e4d-bc0d-0a53d0f6e65a"
+      "router": {
+        "origin": "{YOUR_ROUTER_ORIGIN}"
+      },
+      "eas": {
+        "projectId": "a0121110-3333-4444-5555-666666666666"
+      }
     }
   }
 }
