@@ -1,2 +1,4 @@
+// Initialize Natively console log capture before anything else
+import './utils/errorLogger';
+
 import 'expo-router/entry';
-// No TrackPlayer.registerPlaybackService here as it's removed.
