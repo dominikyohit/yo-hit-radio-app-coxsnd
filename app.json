@@ -1,54 +1,72 @@
+
 {
   "expo": {
     "name": "Yo Hit Radio",
-    "slug": "yohitradio",
-    "version": "1.0.0",
+    "slug": "yo-hit-radio",
+    "version": "1.0.2",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
-    "scheme": "yohitradio",
     "userInterfaceStyle": "automatic",
+    "newArchEnabled": false,
     "splash": {
-      "image": "./assets/images/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#4B1E78"
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.yohitradio.app",
+      "bundleIdentifier": "com.anonymous.Natively",
       "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
         "UIBackgroundModes": [
           "audio"
-        ]
+        ],
+        "NSCameraUsageDescription": false,
+        "NSPhotoLibraryUsageDescription": false
       }
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#4B1E78"
       },
       "package": "com.yohitradio.app",
+      "googleServicesFile": "./google-services.json",
+      "versionCode": 5,
       "permissions": [
-        "android.permission.INTERNET"
+        "INTERNET",
+        "WAKE_LOCK",
+        "MODIFY_AUDIO_SETTINGS",
+        "POST_NOTIFICATIONS"
+      ],
+      "blockedPermissions": [
+        "CAMERA",
+        "RECORD_AUDIO",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "READ_MEDIA_IMAGES",
+        "READ_MEDIA_VIDEO"
       ]
     },
     "web": {
-      "bundler": "metro",
-      "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "bundler": "metro"
     },
     "plugins": [
-      "expo-router"
+      "expo-font",
+      "expo-router",
+      "expo-web-browser",
+      [
+        "onesignal-expo-plugin",
+        {
+          "mode": "development"
+        }
+      ]
     ],
+    "scheme": "yohitradio",
     "experiments": {
       "typedRoutes": true
     },
     "extra": {
-      "router": {
-        "origin": "{YOUR_ROUTER_ORIGIN}"
-      },
-      "eas": {
-        "projectId": "a0121110-3333-4444-5555-666666666666"
-      }
+      "router": {},
+      "backendUrl": "https://ggjfh5vjvuut7kh3tnnefceazjf2q6jg.app.specular.dev",
+      "oneSignalAppId": "41c0200e-69a3-4e4d-bc0d-0a53d0f6e65a"
     }
   }
 }
