@@ -11,7 +11,7 @@ import Animated, {
 import { parseEventDate, formatDateBadge } from '@/utils/dateHelpers';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AudioManager from '@/utils/audioManager';
-import TrackPlayer, { State, Event } from 'react-native-track-player';
+import TrackPlayer, { State, Event, usePlaybackState } from 'react-native-track-player';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { IconSymbol } from '@/components/IconSymbol';
 import { decodeHtmlEntities } from '@/utils/htmlDecoder';
@@ -206,7 +206,10 @@ function resolveImageSource(source: string | number | ImageSourcePropType | unde
 }
 
 export default function HomeScreen() {
-  const [isPlaying, setIsPlaying] = useState(false);
+  // Use TrackPlayer's usePlaybackState hook for reactive state updates
+  const playbackState = usePlaybackState();
+  const isPlaying = playbackState.state === State.Playing || playbackState.state === State.Buffering;
+  
   const [metadata, setMetadata] = useState<AzuraCastMetadata | null>(null);
   const [loading, setLoading] = useState(false);
   const [currentShow, setCurrentShow] = useState<Show | null>(null);
@@ -231,37 +234,6 @@ export default function HomeScreen() {
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ rotate: `${rotation.value}deg` }],
   }));
-
-  // Listen to TrackPlayer state changes
-  useEffect(() => {
-    console.log('[Home] Setting up TrackPlayer state listener');
-    
-    const updatePlaybackState = async () => {
-      try {
-        const state = await TrackPlayer.getState();
-        const playing = state === State.Playing;
-        setIsPlaying(playing);
-        console.log('[Home] Playback state updated:', state, 'isPlaying:', playing);
-      } catch (error) {
-        console.error('[Home] Error getting playback state:', error);
-      }
-    };
-
-    // Initial state check
-    updatePlaybackState();
-
-    // Listen for state changes
-    const subscription = TrackPlayer.addEventListener(Event.PlaybackState, ({ state }) => {
-      const playing = state === State.Playing;
-      setIsPlaying(playing);
-      console.log('[Home] Playback state changed:', state, 'isPlaying:', playing);
-    });
-
-    return () => {
-      console.log('[Home] Removing TrackPlayer state listener');
-      subscription.remove();
-    };
-  }, []);
 
   useEffect(() => {
     if (isPlaying) {

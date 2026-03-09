@@ -1,15 +1,41 @@
 
 /**
- * Placeholder service file for compatibility
+ * TrackPlayer Background Service
  * 
- * This file is no longer needed with expo-audio, but is kept
- * to prevent import errors in existing code.
- * 
- * expo-audio does not require a separate background service registration
- * like react-native-track-player did.
+ * Handles remote control events (play, pause, stop) from:
+ * - Media notification (Android)
+ * - Lock screen controls (iOS)
+ * - Bluetooth/headphone controls
+ * - Car audio systems
  */
 
+import TrackPlayer, { Event } from 'react-native-track-player';
+
 export async function playbackService() {
-  console.log('[PlaybackService] ℹ️ Using expo-audio - no separate service needed');
-  // expo-audio handles background playback automatically via Audio.setAudioModeAsync
+  console.log('[PlaybackService] 🎵 Registering event handlers');
+
+  TrackPlayer.addEventListener(Event.RemotePlay, async () => {
+    console.log('[PlaybackService] ▶️ Remote Play event');
+    await TrackPlayer.play();
+  });
+
+  TrackPlayer.addEventListener(Event.RemotePause, async () => {
+    console.log('[PlaybackService] ⏸️ Remote Pause event');
+    await TrackPlayer.pause();
+  });
+
+  TrackPlayer.addEventListener(Event.RemoteStop, async () => {
+    console.log('[PlaybackService] 🛑 Remote Stop event');
+    await TrackPlayer.stop();
+  });
+
+  TrackPlayer.addEventListener(Event.PlaybackState, async ({ state }) => {
+    console.log('[PlaybackService] 📊 Playback state changed:', state);
+  });
+
+  TrackPlayer.addEventListener(Event.PlaybackActiveTrackChanged, async ({ track }) => {
+    console.log('[PlaybackService] 🎵 Active track changed:', track?.title);
+  });
+
+  console.log('[PlaybackService] ✅ Event handlers registered');
 }
