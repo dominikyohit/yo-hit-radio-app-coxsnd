@@ -12,7 +12,16 @@
  * from the React Native JS thread, providing true background audio capability.
  */
 
-import TrackPlayer, { Event } from 'react-native-track-player';
+let TrackPlayer: any = null;
+let Event: any = null;
+
+try {
+  const trackPlayerModule = require('react-native-track-player');
+  TrackPlayer = trackPlayerModule.default;
+  Event = trackPlayerModule.Event;
+} catch (error) {
+  console.warn('[PlaybackService] ⚠️ TrackPlayer native module not available. This is expected in Expo Go or web preview.');
+}
 
 /**
  * Playback Service
@@ -25,7 +34,7 @@ import TrackPlayer, { Event } from 'react-native-track-player';
  */
 export async function playbackService() {
   // Check if TrackPlayer is available
-  if (!TrackPlayer || typeof TrackPlayer.addEventListener !== 'function') {
+  if (!TrackPlayer || !Event || typeof TrackPlayer.addEventListener !== 'function') {
     console.warn('[PlaybackService] ⚠️ TrackPlayer is not available. Background playback service cannot start.');
     return;
   }

@@ -8,13 +8,25 @@
  * - Background playback (continues when app is minimized/locked)
  */
 
-import TrackPlayer, {
-  Capability,
-  AppKilledPlaybackBehavior,
-  RepeatMode,
-  State,
-} from 'react-native-track-player';
 import { Platform } from 'react-native';
+
+// Conditionally import TrackPlayer to prevent crashes in Expo Go/web
+let TrackPlayer: any = null;
+let Capability: any = null;
+let AppKilledPlaybackBehavior: any = null;
+let RepeatMode: any = null;
+let State: any = null;
+
+try {
+  const trackPlayerModule = require('react-native-track-player');
+  TrackPlayer = trackPlayerModule.default;
+  Capability = trackPlayerModule.Capability;
+  AppKilledPlaybackBehavior = trackPlayerModule.AppKilledPlaybackBehavior;
+  RepeatMode = trackPlayerModule.RepeatMode;
+  State = trackPlayerModule.State;
+} catch (error) {
+  console.warn('[AudioManager] ⚠️ TrackPlayer native module not available. This is expected in Expo Go or web preview.');
+}
 
 // Check if TrackPlayer is available (not available in Expo Go or web preview)
 const isTrackPlayerAvailable = TrackPlayer && typeof TrackPlayer.setupPlayer === 'function';
@@ -209,7 +221,7 @@ class AudioManager {
    * Check if audio is currently playing
    */
   public async isPlaying(): Promise<boolean> {
-    if (!isTrackPlayerAvailable) {
+    if (!isTrackPlayerAvailable || !State) {
       return false;
     }
 
