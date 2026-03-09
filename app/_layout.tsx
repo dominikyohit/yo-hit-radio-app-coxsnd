@@ -17,6 +17,7 @@ import { Stack, router } from "expo-router";
 import { useFonts } from "expo-font";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { OneSignal } from "react-native-onesignal";
+import { audioManager } from "@/utils/audioManager";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -40,6 +41,20 @@ export default function RootLayout() {
   });
 
   const networkState = useNetworkState();
+
+  // Initialize audio manager asynchronously
+  useEffect(() => {
+    const initAudio = async () => {
+      try {
+        await audioManager.initialize();
+        console.log('[RootLayout] Audio Manager initialized successfully');
+      } catch (error) {
+        console.error('[RootLayout] Failed to initialize Audio Manager:', error);
+        // App continues to work, but audio features may be limited
+      }
+    };
+    initAudio();
+  }, []); // Run once on component mount
 
   useEffect(() => {
     if (loaded) {
