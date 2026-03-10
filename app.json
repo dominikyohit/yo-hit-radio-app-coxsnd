@@ -1,15 +1,12 @@
+
 {
   "expo": {
     "name": "Yo Hit Radio",
-    "slug": "yo-hit-radio",
+    "slug": "yo-hit-radio-app-coxsnd",
     "version": "1.0.2",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
-    "splash": {
-      "resizeMode": "contain",
-      "backgroundColor": "#4B1E78"
-    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.anonymous.Natively",
