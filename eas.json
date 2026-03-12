@@ -6,7 +6,8 @@
       "distribution": "internal",
       "autoIncrement": true,
       "android": {
-        "buildType": "apk"
+        "buildType": "apk",
+        "gradleCommand": ":app:assembleDebug"
       }
     },
     "preview": {
@@ -14,14 +15,16 @@
       "distribution": "internal",
       "autoIncrement": true,
       "android": {
-        "buildType": "apk"
+        "buildType": "apk",
+        "gradleCommand": ":app:assembleRelease"
       }
     },
     "production": {
       "developmentClient": false,
       "autoIncrement": true,
       "android": {
-        "buildType": "app-bundle"
+        "buildType": "app-bundle",
+        "gradleCommand": ":app:bundleRelease"
       }
     }
   },
