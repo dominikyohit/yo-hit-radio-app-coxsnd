@@ -1,8 +1,7 @@
-
 {
   "expo": {
     "name": "Yo Hit Radio",
-    "slug": "yo-hit-radio-app-coxsnd",
+    "slug": "yo-hit-radio",
     "version": "1.0.2",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
@@ -25,7 +24,7 @@
       },
       "package": "com.yohitradio.app",
       "googleServicesFile": "./google-services.json",
-      "versionCode": 3,
+      "versionCode": 4,
       "permissions": [
         "INTERNET",
         "MODIFY_AUDIO_SETTINGS",
