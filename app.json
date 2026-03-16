@@ -4,14 +4,8 @@
     "slug": "yo-hit-radio",
     "version": "1.0.2",
     "orientation": "portrait",
-    "icon": "./assets/images/logo 192 (1).png",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
-    "splash": {
-      "image": "./assets/images/logo 192 (1).png",
-      "resizeMode": "contain",
-      "backgroundColor": "#000000"
-    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.anonymous.Natively",
@@ -26,13 +20,11 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/logo 192 (1).png",
-        "backgroundColor": "#000000"
+        "backgroundColor": "#4B1E78"
       },
-      "edgeToEdgeEnabled": true,
       "package": "com.yohitradio.app",
       "googleServicesFile": "./google-services.json",
-      "versionCode": 3,
+      "versionCode": 4,
       "permissions": [
         "INTERNET",
         "MODIFY_AUDIO_SETTINGS",
@@ -52,7 +44,6 @@
       ]
     },
     "web": {
-      "favicon": "./assets/images/final_quest_240x240.png",
       "bundler": "metro"
     },
     "plugins": [
@@ -72,7 +63,7 @@
     },
     "extra": {
       "router": {},
-      "backendUrl": "https://prod-proj-mttbudqdquje8djf3qn74-liwg5h36mq-ey.a.run.app",
+      "backendUrl": "https://ggjfh5vjvuut7kh3tnnefceazjf2q6jg.app.specular.dev",
       "oneSignalAppId": "41c0200e-69a3-4e4d-bc0d-0a53d0f6e65a"
     }
   }
