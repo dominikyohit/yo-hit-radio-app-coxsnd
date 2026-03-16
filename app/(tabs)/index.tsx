@@ -132,9 +132,9 @@ interface WordPressScheduleItem {
     sort_order?: number;
   };
   _embedded?: {
-    'wp:featuredmedia'?: {
+    'wp:featuredmedia'?: Array<{
       source_url?: string;
-    }[];
+    }>;
   };
 }
 
@@ -576,7 +576,7 @@ export default function HomeScreen() {
         metadataInterval.current = null;
       }
     };
-  }, [fetchMetadata]); // Include fetchMetadata dependency
+  }, []); // Empty dependency array - only runs once on mount
 
   // Fetch schedule on mount
   useEffect(() => {
