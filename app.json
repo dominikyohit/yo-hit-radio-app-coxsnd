@@ -1,8 +1,8 @@
 {
   "expo": {
     "name": "Yo Hit Radio",
-    "slug": "yo-hit-radio",
-    "version": "1.0.2",
+    "slug": "yo-hit-radio-app-coxsnd",
+    "version": "1.0.7",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -24,7 +24,7 @@
       },
       "package": "com.yohitradio.app",
       "googleServicesFile": "./google-services.json",
-      "versionCode": 3,
+      "versionCode": 8,
       "permissions": [
         "INTERNET",
         "MODIFY_AUDIO_SETTINGS",
@@ -63,7 +63,7 @@
     },
     "extra": {
       "router": {},
-      "backendUrl": "https://ggjfh5vjvuut7kh3tnnefceazjf2q6jg.app.specular.dev",
+      "backendUrl": "https://prod-proj-mttbudqdquje8djf3qn74-liwg5h36mq-ey.a.run.app",
       "oneSignalAppId": "41c0200e-69a3-4e4d-bc0d-0a53d0f6e65a"
     }
   }

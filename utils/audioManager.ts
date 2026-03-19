@@ -1,6 +1,7 @@
 
 import { Audio, AVPlaybackStatus, InterruptionModeIOS, InterruptionModeAndroid } from 'expo-av';
 import { Platform } from 'react-native';
+import Constants from 'expo-constants';
 
 /**
  * Global Audio Manager - Singleton pattern with ENHANCED background playback support
@@ -16,6 +17,10 @@ import { Platform } from 'react-native';
  * - ✅ Continuous metadata refresh (even when paused)
  * - ✅ Optimized for low-bandwidth streaming
  */
+
+// Detect Expo Go — some native audio features behave differently there
+const isExpoGo = Constants.appOwnership === 'expo';
+
 class AudioManager {
   private static instance: AudioManager;
   private sound: Audio.Sound | null = null;
@@ -27,7 +32,10 @@ class AudioManager {
   private currentArtwork: string | undefined = undefined;
 
   private constructor() {
-    this.initializeAudio();
+    // Fire-and-forget — errors are caught inside initializeAudio
+    this.initializeAudio().catch((err) => {
+      console.warn('[AudioManager] Constructor: initializeAudio rejected (caught):', err);
+    });
   }
 
   /**
@@ -45,18 +53,24 @@ class AudioManager {
   private async initializeAudio(): Promise<void> {
     try {
       console.log('[AudioManager] 🎵 Initializing audio session for background playback');
-      console.log('[AudioManager] 📱 Platform:', Platform.OS);
-      
+      console.log('[AudioManager] 📱 Platform:', Platform.OS, '| Expo Go:', isExpoGo);
+
+      if (typeof Audio?.setAudioModeAsync !== 'function') {
+        console.warn('[AudioManager] ⚠️ Audio.setAudioModeAsync not available — skipping init');
+        this.isInitialized = true;
+        return;
+      }
+
       // CRITICAL: This configuration enables background playback AND media notifications
       await Audio.setAudioModeAsync({
         // BACKGROUND PLAYBACK (Both platforms)
         staysActiveInBackground: true, // ✅ CRITICAL: Enables background playback
-        
+
         // iOS CONFIGURATION
         playsInSilentModeIOS: true, // ✅ Play even when device is in silent mode
         allowsRecordingIOS: false, // We're not recording
         interruptionModeIOS: InterruptionModeIOS.DoNotMix, // ✅ CRITICAL: Enables lock screen controls
-        
+
         // ANDROID CONFIGURATION
         shouldDuckAndroid: true, // Lower volume of other apps when playing
         playThroughEarpieceAndroid: false, // Use speaker/headphones, not earpiece
@@ -64,11 +78,11 @@ class AudioManager {
       });
 
       this.isInitialized = true;
-      
+
       console.log('[AudioManager] ✅ Audio session initialized successfully');
       console.log('[AudioManager] ✅ Background playback ENABLED');
       console.log('[AudioManager] ✅ Audio focus: DoNotMix (full control)');
-      
+
       if (Platform.OS === 'android') {
         console.log('[AudioManager] 🤖 Android: Media notification will appear when playing');
         console.log('[AudioManager] 🤖 Android: Notification controls: Play/Pause/Stop');
@@ -78,7 +92,9 @@ class AudioManager {
         console.log('[AudioManager] 🍎 iOS: Now Playing metadata will update');
       }
     } catch (error) {
-      console.error('[AudioManager] ❌ Error initializing audio session:', error);
+      // Mark as initialized anyway so callers don't retry in a loop
+      this.isInitialized = true;
+      console.error('[AudioManager] ❌ Error initializing audio session (non-fatal):', error);
     }
   }
 
@@ -170,6 +186,10 @@ class AudioManager {
       await this.stopCurrentAudio();
 
       console.log('[AudioManager] 🔧 Creating audio player with background playback enabled');
+
+      if (typeof Audio?.Sound?.createAsync !== 'function') {
+        throw new Error('Audio.Sound.createAsync is not available in this environment');
+      }
 
       // CRITICAL: Load and play audio with background playback configuration
       const { sound } = await Audio.Sound.createAsync(
