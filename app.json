@@ -5,6 +5,11 @@
     "version": "1.0.7",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
+    "splash": {
+      "image": "./assets/images/logo 192 (1).png",
+      "resizeMode": "contain",
+      "backgroundColor": "#4B1E78"
+    },
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
@@ -20,6 +25,11 @@
     },
     "android": {
       "adaptiveIcon": {
+        "backgroundColor": "#4B1E78"
+      },
+      "splash": {
+        "image": "./assets/images/logo 192 (1).png",
+        "resizeMode": "contain",
         "backgroundColor": "#4B1E78"
       },
       "package": "com.yohitradio.app",
