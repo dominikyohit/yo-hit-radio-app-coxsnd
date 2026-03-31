@@ -33,7 +33,7 @@
         "resizeMode": "contain",
         "backgroundColor": "#4B1E78"
       },
-      "package": "com.anonymous.Natively",
+      "package": "com.yohitradio.app",
       "googleServicesFile": "./google-services.json",
       "versionCode": 8,
       "permissions": [
